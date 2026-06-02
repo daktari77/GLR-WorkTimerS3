@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include <time.h>
 #include <FS.h>
@@ -42,6 +44,17 @@ bool fsReady    = false;
 
 Preferences prefs;
 uint32_t lastStateSave = 0;
+
+// config pomodoro (minuti) - modificabile via web, persistita in NVS
+int cfgWork   = POMO_WORK_MIN;
+int cfgBreak  = POMO_BREAK_MIN;
+int cfgLong   = POMO_LONGBREAK_MIN;
+int cfgCycles = POMO_CYCLES_TO_LONG;
+
+// rete / web server
+WebServer server(80);
+bool   wifiUp = false;
+String ipStr  = "";
 
 // ---------------- Bottoni ----------------
 struct Button {
@@ -161,13 +174,28 @@ void loadState() {
   }
 }
 
+// ---------------- Config pomodoro (NVS) ----------------
+void loadConfig() {
+  cfgWork   = prefs.getInt("cwork",  POMO_WORK_MIN);
+  cfgBreak  = prefs.getInt("cbreak", POMO_BREAK_MIN);
+  cfgLong   = prefs.getInt("clong",  POMO_LONGBREAK_MIN);
+  cfgCycles = prefs.getInt("ccyc",   POMO_CYCLES_TO_LONG);
+}
+
+void saveConfig() {
+  prefs.putInt("cwork",  cfgWork);
+  prefs.putInt("cbreak", cfgBreak);
+  prefs.putInt("clong",  cfgLong);
+  prefs.putInt("ccyc",   cfgCycles);
+}
+
 // ---------------- Pomodoro logica ----------------
 void pomoSetPhase(PomoPhase p) {
   pomoPhase = p;
   switch (p) {
-    case PH_WORK:      pomoTargetMs = (uint32_t)POMO_WORK_MIN      * 60000UL; break;
-    case PH_BREAK:     pomoTargetMs = (uint32_t)POMO_BREAK_MIN     * 60000UL; break;
-    case PH_LONGBREAK: pomoTargetMs = (uint32_t)POMO_LONGBREAK_MIN * 60000UL; break;
+    case PH_WORK:      pomoTargetMs = (uint32_t)cfgWork  * 60000UL; break;
+    case PH_BREAK:     pomoTargetMs = (uint32_t)cfgBreak * 60000UL; break;
+    case PH_LONGBREAK: pomoTargetMs = (uint32_t)cfgLong  * 60000UL; break;
   }
 }
 
@@ -178,7 +206,7 @@ void pomoAdvance() {
   if (pomoPhase == PH_WORK) {
     logSession("pomodoro-work", pomoTargetMs);
     pomoDoneWork++;
-    if (pomoDoneWork % POMO_CYCLES_TO_LONG == 0) pomoSetPhase(PH_LONGBREAK);
+    if (pomoDoneWork % cfgCycles == 0) pomoSetPhase(PH_LONGBREAK);
     else                                         pomoSetPhase(PH_BREAK);
   } else {
     pomoSetPhase(PH_WORK);
@@ -241,83 +269,49 @@ uint16_t phaseColor() {
   return TFT_WHITE;
 }
 
-// card riusabile: bg slate, cifre trasparenti, seam opzionale, bordo colorato
-void drawCard(int x, int y, int w, int h, const char* txt,
-              uint8_t font, uint16_t border, bool seam) {
-  uint16_t cardBg = tft.color565(28, 32, 44);   // slate scuro
-  spr.fillRoundRect(x, y, w, h, 12, cardBg);
+// grigio discreto per etichette (leggibile ma defilato)
+static const uint16_t DIM = 0x8410;   // ~ rgb(130,130,130)
+
+// disegna il tempo grande centrato, scegliendo il font numerico piu' grande
+// che entra in larghezza (font8 ~75px, font7 ~48px LCD).
+void drawBigTime(const char* str, int cy, uint16_t col) {
   spr.setTextDatum(MC_DATUM);
-  spr.setTextColor(TFT_WHITE);                  // trasparente: seam attraversa
-  spr.drawString(txt, x + w/2, y + h/2, font);
-  if (seam) spr.drawFastHLine(x + 3, y + h/2, w - 6, TFT_BLACK);  // linea di piega
-  spr.drawRoundRect(x, y, w, h, 12, border);
+  spr.setTextColor(col);
+  uint8_t font = (strlen(str) <= 5) ? 8 : 7;   // HH:MM/MM:SS = font8, H:MM:SS = font7
+  spr.drawString(str, SCR_W/2, cy, font);
 }
 
 void drawClock() {
-  // layout card
-  const int CY = 34, CH = 86, CW = 120;
-  const int HX = 25, MX = 175;
-  const int MIDX = HX + CW + (MX - (HX + CW)) / 2;   // centro tra le due card
-  const int CMID = CY + CH / 2;
-
-  char hh[4] = "--", mm[4] = "--";
-  int sec = 0; bool synced = timeSynced;
-  struct tm tmv;
-  if (synced) {
-    time_t t = time(nullptr); localtime_r(&t, &tmv);
-    snprintf(hh, sizeof(hh), "%02d", tmv.tm_hour);
-    snprintf(mm, sizeof(mm), "%02d", tmv.tm_min);
-    sec = tmv.tm_sec;
-  }
-
-  // card ore / minuti
-  uint16_t edge = tft.color565(64, 72, 92);
-  drawCard(HX, CY, CW, CH, hh, 8, edge, true);
-  drawCard(MX, CY, CW, CH, mm, 8, edge, true);
-
-  // colon centrale lampeggiante (acceso su secondi pari)
-  uint16_t dotCol = (synced && (sec % 2)) ? tft.color565(40,44,56) : TFT_CYAN;
-  spr.fillRoundRect(MIDX - 4, CMID - 22, 9, 9, 3, dotCol);
-  spr.fillRoundRect(MIDX - 4, CMID + 13, 9, 9, 3, dotCol);
-
-  // barra secondi (progresso del minuto)
-  const int BX = HX, BY = CY + CH + 12, BW = MX + CW - HX, BH = 5;
-  spr.fillRoundRect(BX, BY, BW, BH, 2, tft.color565(40,44,56));
-  if (synced) {
-    int fw = (BW * sec) / 59;
-    if (fw > 0) spr.fillRoundRect(BX, BY, fw, BH, 2, TFT_CYAN);
-  }
-
-  // data
   spr.setTextDatum(MC_DATUM);
-  if (synced) {
-    char buf[32];
+  char buf[40];
+  if (timeSynced) {
+    time_t t = time(nullptr); struct tm tmv; localtime_r(&t, &tmv);
+    // ora grande bianca
+    strftime(buf, sizeof(buf), "%H:%M", &tmv);
+    drawBigTime(buf, 78, TFT_WHITE);
+    // data discreta
     strftime(buf, sizeof(buf), "%a %d %b %Y", &tmv);
-    spr.setTextColor(tft.color565(150,160,180), TFT_BLACK);
-    spr.drawString(buf, SCR_W/2, BY + BH + 13, 2);
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString(buf, SCR_W/2, 150, 2);
   } else {
-    spr.setTextColor(TFT_ORANGE, TFT_BLACK);
-    spr.drawString("no NTP - tieni KEY al boot per WiFi", SCR_W/2, BY + BH + 13, 2);
+    drawBigTime("00:00", 78, DIM);
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString("no NTP - tieni KEY al boot", SCR_W/2, 150, 2);
   }
 }
 
 void drawTimer() {
   char buf[32];
   bool pomo = (mode == MODE_POMODORO);
-  uint16_t pcol = phaseColor();
-  uint16_t scol = runSt == ST_RUNNING ? TFT_GREEN
-                : runSt == ST_PAUSED  ? TFT_ORANGE
-                : tft.color565(90, 96, 110);
+  spr.setTextDatum(MC_DATUM);
 
-  // chip fase (solo pomodoro): pill colorata
+  // fase pomodoro: etichetta discreta in alto
   if (pomo) {
-    spr.fillRoundRect(90, 36, 140, 22, 8, pcol);
-    spr.setTextDatum(MC_DATUM);
-    spr.setTextColor(TFT_BLACK);
-    spr.drawString(phaseName(pomoPhase), 160, 47, 2);
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString(phaseName(pomoPhase), SCR_W/2, 30, 2);
   }
 
-  // tempo (countdown per pomodoro, crescente per cronometro) in card 7-seg
+  // tempo grande bianco (countdown pomodoro, crescente cronometro)
   if (pomo) {
     uint32_t e = elapsedMs();
     uint32_t rem = (e >= pomoTargetMs) ? 0 : (pomoTargetMs - e);
@@ -325,66 +319,61 @@ void drawTimer() {
   } else {
     fmtHMS(elapsedMs(), buf, sizeof(buf));
   }
-  int cardY = pomo ? 64 : 52;
-  int cardH = 60;
-  drawCard(30, cardY, 260, cardH, buf, 7, scol, false);
+  drawBigTime(buf, 82, TFT_WHITE);
 
-  // barra progresso (solo pomodoro)
-  int by = cardY + cardH + 9;
+  // barra progresso pomodoro: linea sottile discreta
   if (pomo) {
-    const int bw = 260;
-    spr.fillRoundRect(30, by, bw, 6, 2, tft.color565(40, 44, 56));
+    const int bw = 240, bx = SCR_W/2 - bw/2, by = 138;
+    spr.drawFastHLine(bx, by, bw, tft.color565(50, 50, 50));
     uint32_t e = elapsedMs();
     if (pomoTargetMs > 0) {
       uint32_t cap = e > pomoTargetMs ? pomoTargetMs : e;
       int fw = (int)((uint64_t)bw * cap / pomoTargetMs);
-      if (fw > 0) spr.fillRoundRect(30, by, fw, 6, 2, pcol);
+      if (fw > 0) spr.drawFastHLine(bx, by, fw, TFT_WHITE);
     }
-    by += 12;
   }
 
-  // stato
+  // stato discreto in basso
   const char* st = runSt == ST_RUNNING ? "RUNNING"
                  : runSt == ST_PAUSED  ? "PAUSA" : "PRONTO";
-  spr.setTextDatum(MC_DATUM);
-  spr.setTextColor(scol, TFT_BLACK);
-  spr.drawString(st, SCR_W/2, by + 6, 4);
+  spr.setTextColor(DIM, TFT_BLACK);
+  spr.drawString(st, SCR_W/2, 148, 2);
 
-  // dot cicli pomodoro
+  // contatore cicli pomodoro discreto
   if (pomo) {
-    int done = pomoDoneWork % POMO_CYCLES_TO_LONG;
-    int n = POMO_CYCLES_TO_LONG;
-    const int gap = 16;
-    int sx = SCR_W/2 - (n - 1) * gap / 2;
-    int dy = SCR_H - 8;
-    for (int i = 0; i < n; i++) {
-      uint16_t c = (i < done) ? pcol : tft.color565(60, 66, 82);
-      spr.fillCircle(sx + i * gap, dy, 4, c);
-    }
+    snprintf(buf, sizeof(buf), "%d/%d", pomoDoneWork % cfgCycles, cfgCycles);
+    spr.setTextDatum(BR_DATUM);
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString(buf, SCR_W-6, SCR_H-4, 2);
   }
 }
 
 void render() {
   spr.fillSprite(TFT_BLACK);
 
-  // header: nome modo
-  spr.setTextColor(phaseColor(), TFT_BLACK);
+  // header discreto: nome modo
+  spr.setTextColor(DIM, TFT_BLACK);
   spr.setTextDatum(TL_DATUM);
-  spr.drawString(modeName(mode), 6, 6, 4);
+  spr.drawString(modeName(mode), 6, 6, 2);
 
-  // wifi/log indicatori in alto a destra
+  // indicatore NTP discreto in alto a destra
   spr.setTextDatum(TR_DATUM);
-  spr.setTextColor(timeSynced ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
-  spr.drawString(timeSynced ? "NTP" : "---", SCR_W-6, 8, 2);
+  spr.setTextColor(timeSynced ? DIM : 0x4208, TFT_BLACK);
+  spr.drawString(timeSynced ? "NTP" : "---", SCR_W-6, 6, 2);
 
   if (mode == MODE_CLOCK) {
     drawClock();
-    // numero sessioni loggate
+    // numero sessioni loggate (discreto)
     char buf[24];
-    snprintf(buf, sizeof(buf), "log: %d sess.", countSessions());
-    spr.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "log %d", countSessions());
+    spr.setTextColor(DIM, TFT_BLACK);
     spr.setTextDatum(BL_DATUM);
     spr.drawString(buf, 6, SCR_H-4, 2);
+    // IP per web config (discreto, in basso a destra)
+    if (wifiUp) {
+      spr.setTextDatum(BR_DATUM);
+      spr.drawString(ipStr, SCR_W-6, SCR_H-4, 2);
+    }
   } else {
     drawTimer();
   }
@@ -429,16 +418,75 @@ void setupTime(bool forcePortal) {
   }
 
   if (ok && WiFi.status() == WL_CONNECTED) {
-    Serial.printf("[WiFi] ok %s\n", WiFi.localIP().toString().c_str());
+    ipStr  = WiFi.localIP().toString();
+    wifiUp = true;
+    Serial.printf("[WiFi] ok %s\n", ipStr.c_str());
     configTime(GMT_OFFSET_SEC, DST_OFFSET_SEC, NTP_SERVER);
     struct tm tmv;
     if (getLocalTime(&tmv, 5000)) { timeSynced = true; Serial.println("[NTP] sync ok"); }
+    // WiFi resta acceso per il web config (vedi startWeb)
   } else {
     Serial.println("[WiFi] no connessione");
+    WiFi.mode(WIFI_OFF);
   }
-  // spegni radio dopo sync per risparmio (ri-config via BOOT all'avvio)
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
+}
+
+// ---------------- Web config pomodoro ----------------
+String htmlPage() {
+  String h = F("<!doctype html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>WorkTimer</title><style>"
+    "body{font-family:system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:24px}"
+    ".c{max-width:360px;margin:auto}h1{font-size:20px;font-weight:600}"
+    "label{display:block;margin:14px 0 4px;color:#aaa;font-size:13px}"
+    "input{width:100%;padding:10px;border:1px solid #333;border-radius:8px;"
+    "background:#1c1c1c;color:#fff;font-size:16px;box-sizing:border-box}"
+    "button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:8px;"
+    "background:#2d7;color:#000;font-size:16px;font-weight:600}"
+    ".m{margin-top:14px;color:#2d7;font-size:14px}</style></head><body><div class='c'>"
+    "<h1>Pomodoro config</h1><form method='POST' action='/save'>");
+  h += "<label>Lavoro (min)</label><input type='number' min='1' max='180' name='work' value='" + String(cfgWork) + "'>";
+  h += "<label>Pausa (min)</label><input type='number' min='1' max='120' name='brk' value='" + String(cfgBreak) + "'>";
+  h += "<label>Pausa lunga (min)</label><input type='number' min='1' max='120' name='long' value='" + String(cfgLong) + "'>";
+  h += "<label>Cicli prima della pausa lunga</label><input type='number' min='1' max='12' name='cyc' value='" + String(cfgCycles) + "'>";
+  h += F("<button type='submit'>Salva</button></form></div></body></html>");
+  return h;
+}
+
+void handleRoot() { server.send(200, "text/html", htmlPage()); }
+
+int clampInt(const String& s, int lo, int hi, int def) {
+  if (s.length() == 0) return def;
+  int v = s.toInt();
+  if (v < lo) v = lo; if (v > hi) v = hi;
+  return v;
+}
+
+void handleSave() {
+  cfgWork   = clampInt(server.arg("work"), 1, 180, cfgWork);
+  cfgBreak  = clampInt(server.arg("brk"),  1, 120, cfgBreak);
+  cfgLong   = clampInt(server.arg("long"), 1, 120, cfgLong);
+  cfgCycles = clampInt(server.arg("cyc"),  1, 12,  cfgCycles);
+  saveConfig();
+  // applica subito se pomodoro fermo (no interruzione sessione attiva)
+  if (mode == MODE_POMODORO && runSt == ST_IDLE) pomoSetPhase(pomoPhase);
+  Serial.printf("[CFG] work=%d brk=%d long=%d cyc=%d\n", cfgWork, cfgBreak, cfgLong, cfgCycles);
+  String h = F("<!doctype html><meta charset='utf-8'>"
+    "<meta http-equiv='refresh' content='1;url=/'>"
+    "<body style='font-family:sans-serif;background:#111;color:#2d7;padding:24px'>Salvato.</body>");
+  server.send(200, "text/html", h);
+}
+
+void startWeb() {
+  if (!wifiUp) return;
+  if (MDNS.begin("worktimer")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("[WEB] http://worktimer.local");
+  }
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/save", HTTP_POST, handleSave);
+  server.begin();
+  Serial.printf("[WEB] http://%s/\n", ipStr.c_str());
 }
 
 // ---------------- Setup / Loop ----------------
@@ -452,6 +500,7 @@ void setup() {
 
   tft.init();
   tft.setRotation(1);                   // landscape 320x170
+  tft.invertDisplay(true);              // pannello T-Display S3: corregge colori invertiti
   tft.fillScreen(TFT_BLACK);
   spr.setColorDepth(16);
   if (!spr.createSprite(SCR_W, SCR_H)) {
@@ -463,6 +512,7 @@ void setup() {
 
   // stato persistente
   prefs.begin("worktimer", false);
+  loadConfig();
   loadState();
   pomoSetPhase(pomoPhase);   // imposta pomoTargetMs per la fase ripristinata
 
@@ -470,6 +520,7 @@ void setup() {
   // (non uso BOOT/GPIO0: e' strapping pin, tenuto al reset entra in download mode)
   bool forcePortal = (digitalRead(PIN_BTN_KEY) == LOW);
   setupTime(forcePortal);
+  startWeb();                // web config pomodoro (se WiFi connesso)
 
   Serial.println("[BOOT] ready");
 }
@@ -493,6 +544,9 @@ void loop() {
       pomoAdvance();
     }
   }
+
+  // web config
+  if (wifiUp) server.handleClient();
 
   // salvataggio periodico mentre attivo (recupero dopo calo corrente)
   if (runSt == ST_RUNNING && (millis() - lastStateSave) > STATE_SAVE_MS) {
