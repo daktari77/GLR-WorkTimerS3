@@ -2,3 +2,6 @@
 .vscode/
 *.bin
 *.elf
+
+# local Claude Code skills/config
+.claude/
