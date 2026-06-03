@@ -25,7 +25,7 @@ static const int SCR_W = 320;
 static const int SCR_H = 170;
 
 // ---------------- Stato app ----------------
-enum Mode  { MODE_CLOCK, MODE_STOPWATCH, MODE_POMODORO, MODE_COUNT };
+enum Mode  { MODE_CLOCK, MODE_STOPWATCH, MODE_POMODORO, MODE_TIMER, MODE_COUNT };
 enum RunSt { ST_IDLE, ST_RUNNING, ST_PAUSED };
 enum PomoPhase { PH_WORK, PH_BREAK, PH_LONGBREAK };
 
@@ -40,6 +40,7 @@ uint32_t segStart  = 0;     // millis() all'avvio segmento attivo
 PomoPhase pomoPhase   = PH_WORK;
 int       pomoDoneWork = 0;       // work completati nel ciclo
 uint32_t  pomoTargetMs = 0;       // durata fase corrente
+bool      pomoWaiting   = false;  // fase scaduta: avvisa a display, attende KEY
 
 bool timeSynced = false;
 bool fsReady    = false;
@@ -52,6 +53,10 @@ int cfgWork   = POMO_WORK_MIN;
 int cfgBreak  = POMO_BREAK_MIN;
 int cfgLong   = POMO_LONGBREAK_MIN;
 int cfgCycles = POMO_CYCLES_TO_LONG;
+
+// config timer countdown (minuti) - regolabile coi tasti o via web, persistita in NVS
+int  cfgTimerMin = TIMER_DEFAULT_MIN;
+bool timerEdit   = false;   // true = sotto-stato REGOLA durata (tasti = +/-)
 
 // config estesa (web + NVS)
 int  cfgGmtMin  = GMT_OFFSET_SEC / 60;   // offset fuso (minuti)
@@ -169,6 +174,7 @@ const char* modeName(Mode m) {
   switch (m) { case MODE_CLOCK: return "OROLOGIO";
                case MODE_STOPWATCH: return "CRONOMETRO";
                case MODE_POMODORO: return "POMODORO";
+               case MODE_TIMER: return "TIMER";
                default: return "?"; }
 }
 const char* phaseName(PomoPhase p) {
@@ -244,6 +250,7 @@ void loadConfig() {
   cfgAutoAdv = prefs.getBool("cauto",   POMO_AUTO_ADV);
   cfgBright  = prefs.getInt ("cbright", SCREEN_BRIGHT);
   cfgBuzz    = prefs.getBool("cbuzz",   BUZZER_DEFAULT);
+  cfgTimerMin = prefs.getInt("ctmr",    TIMER_DEFAULT_MIN);
 }
 
 void saveConfig() {
@@ -256,6 +263,7 @@ void saveConfig() {
   prefs.putBool("cauto",   cfgAutoAdv);
   prefs.putInt ("cbright", cfgBright);
   prefs.putBool("cbuzz",   cfgBuzz);
+  prefs.putInt ("ctmr",    cfgTimerMin);
 }
 
 // ---------------- Pomodoro logica ----------------
@@ -286,18 +294,41 @@ void pomoNextPhase() {
 // cfgAutoAdv=true -> riparte da solo; false -> resta in pausa, attende KEY.
 void pomoAdvance() {
   pomoNextPhase();
-  if (cfgAutoAdv) { resetSegment(); runSt = ST_RUNNING; }
-  else            { accumMs = 0;    runSt = ST_PAUSED;  }
+  if (cfgAutoAdv) { resetSegment(); runSt = ST_RUNNING; pomoWaiting = false; }
+  else            { accumMs = 0;    runSt = ST_PAUSED;  pomoWaiting = true;  }
   saveState();
+}
+
+// ---------------- Timer countdown (regolato coi tasti) ----------------
+// mantiene pomoTargetMs allineato a cfgTimerMin quando il timer e' fermo
+void timerSyncTarget() {
+  if (mode == MODE_TIMER && runSt == ST_IDLE)
+    pomoTargetMs = (uint32_t)cfgTimerMin * 60000UL;
+}
+// +/- 1 minuto con wrap nei limiti TIMER_MIN_MIN..TIMER_MAX_MIN
+void timerAdjust(int delta) {
+  cfgTimerMin += delta;
+  if (cfgTimerMin > TIMER_MAX_MIN) cfgTimerMin = TIMER_MIN_MIN;
+  if (cfgTimerMin < TIMER_MIN_MIN) cfgTimerMin = TIMER_MAX_MIN;
+  timerSyncTarget();
+}
+void timerConfirm() {         // esce da REGOLA e persiste la durata
+  timerEdit = false;
+  saveConfig();
+  timerSyncTarget();
 }
 
 // ---------------- Azioni bottoni ----------------
 void actionPrimary() {        // KEY short
+  // timer scaduto: la prima KEY conferma soltanto l'avviso (non riavvia)
+  if (pomoWaiting && mode == MODE_TIMER && runSt == ST_IDLE) { pomoWaiting = false; return; }
+  pomoWaiting = false;        // qualsiasi KEY chiude l'avviso di fine fase
   switch (runSt) {
     case ST_IDLE:
       if (mode == MODE_CLOCK) return;     // niente da avviare
       accumMs = 0; segStart = millis(); runSt = ST_RUNNING;
       if (mode == MODE_POMODORO) pomoSetPhase(pomoPhase); // assicura target
+      if (mode == MODE_TIMER) pomoTargetMs = (uint32_t)cfgTimerMin * 60000UL;
       break;
     case ST_RUNNING:
       accumMs += (millis() - segStart); runSt = ST_PAUSED;
@@ -314,15 +345,19 @@ void actionStop() {           // KEY long: ferma e salva
   uint32_t dur = elapsedMs();
   if (mode == MODE_STOPWATCH) logSession("stopwatch", dur);
   else if (mode == MODE_POMODORO) logSession("pomodoro-partial", dur);
-  runSt = ST_IDLE; accumMs = 0;
+  else if (mode == MODE_TIMER) logSession("timer-partial", dur);
+  runSt = ST_IDLE; accumMs = 0; pomoWaiting = false; timerEdit = false;
   if (mode == MODE_POMODORO) { pomoDoneWork = 0; pomoSetPhase(PH_WORK); }
+  if (mode == MODE_TIMER) timerSyncTarget();
   saveState();
 }
 
 void actionModeSwitch() {     // BOOT short: cambia modo (solo se fermo)
   if (runSt != ST_IDLE) return;
   mode = (Mode)((mode + 1) % MODE_COUNT);
+  pomoWaiting = false; timerEdit = false;
   if (mode == MODE_POMODORO) { pomoDoneWork = 0; pomoSetPhase(PH_WORK); }
+  if (mode == MODE_TIMER) timerSyncTarget();
   saveState();
 }
 
@@ -352,6 +387,7 @@ uint16_t modeColor() {
   switch (mode) {
     case MODE_STOPWATCH: return tft.color565(255, 190, 60);  // ambra
     case MODE_POMODORO:  return phaseColor();                // rosso/verde/blu per fase
+    case MODE_TIMER:     return tft.color565(220, 120, 230); // magenta (countdown)
     default:             return tft.color565(90, 220, 230);  // ciano (orologio)
   }
 }
@@ -388,27 +424,43 @@ void drawClock() {
 void drawTimer() {
   char buf[32];
   bool pomo = (mode == MODE_POMODORO);
+  bool tmr  = (mode == MODE_TIMER);
+  bool cdwn = pomo || tmr;                              // modi a conto alla rovescia
+  bool editing = tmr && timerEdit;                      // sotto-stato REGOLA durata
+  bool active  = (runSt == ST_RUNNING || runSt == ST_PAUSED);
   spr.setTextDatum(MC_DATUM);
 
-  // fase pomodoro: etichetta discreta in alto
-  if (pomo) {
+  // riga di contesto in alto: fase pomodoro, oppure modalita' REGOLA del timer
+  if (editing) {
     spr.setTextColor(DIM, TFT_BLACK);
-    spr.drawString(phaseName(pomoPhase), SCR_W/2, 30, 2);
+    spr.drawString("REGOLA DURATA", SCR_W/2, 22, 2);
+  } else if (pomo) {
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString(phaseName(pomoPhase), SCR_W/2, 22, 2);
   }
 
-  // tempo grande bianco (countdown pomodoro, crescente cronometro)
-  if (pomo) {
+  // numero grande (hero). In REGOLA: i minuti come conteggio (non mm:ss, che a
+  // >=60 min diventa h:mm:ss e contraddice l'unita'). Altrove: il countdown.
+  if (editing) {
+    snprintf(buf, sizeof(buf), "%d", cfgTimerMin);
+  } else if (cdwn) {
     uint32_t e = elapsedMs();
     uint32_t rem = (e >= pomoTargetMs) ? 0 : (pomoTargetMs - e);
     fmtHMS(rem, buf, sizeof(buf));
   } else {
     fmtHMS(elapsedMs(), buf, sizeof(buf));
   }
-  drawBigTime(buf, 82, modeColor());
+  drawBigTime(buf, 86, modeColor());
 
-  // barra progresso pomodoro: linea sottile discreta
-  if (pomo) {
-    const int bw = 240, bx = SCR_W/2 - bw/2, by = 138;
+  // unita' sotto il numero quando si regola (chiarisce: e' una durata in minuti)
+  if (editing) {
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString("MIN", SCR_W/2, 138, 2);
+  }
+
+  // barra progresso: solo a countdown avviato; a riposo o in allarme niente cromo
+  if (cdwn && active && !editing && !pomoWaiting) {
+    const int bw = 240, bx = SCR_W/2 - bw/2, by = 142;
     spr.drawFastHLine(bx, by, bw, tft.color565(50, 50, 50));
     uint32_t e = elapsedMs();
     if (pomoTargetMs > 0) {
@@ -418,11 +470,44 @@ void drawTimer() {
     }
   }
 
-  // stato discreto in basso
-  const char* st = runSt == ST_RUNNING ? "RUNNING"
-                 : runSt == ST_PAUSED  ? "PAUSA" : "PRONTO";
-  spr.setTextColor(DIM, TFT_BLACK);
-  spr.drawString(st, SCR_W/2, 148, 2);
+  // REGOLA: etichette dei tasti accanto alla loro posizione fisica
+  // (KEY = tasto in alto a destra, BOOT = tasto in basso a destra; KEY tenuto conferma)
+  if (editing) {
+    spr.setTextDatum(TR_DATUM);
+    spr.setTextColor(TFT_WHITE, TFT_BLACK);
+    spr.drawString("KEY  +1", SCR_W-6, 30, 2);           // tasto in alto a destra
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString("tieni = OK", SCR_W-6, 50, 2);
+    spr.setTextDatum(BR_DATUM);
+    spr.setTextColor(TFT_WHITE, TFT_BLACK);
+    spr.drawString("BOOT  -1", SCR_W-6, SCR_H-4, 2);     // tasto in basso a destra
+    spr.setTextDatum(MC_DATUM);
+  }
+
+  // avviso fine countdown: scaduto, attende KEY. Allarme su due righe:
+  // la prima lampeggia (deve attirare), la seconda resta ferma (leggibile).
+  if (cdwn && pomoWaiting) {
+    bool blink = (millis() / 500) % 2;
+    const char* msg;
+    if (tmr) msg = "TEMPO SCADUTO";
+    else {
+      // pomoPhase e' gia' la fase SUCCESSIVA: se ora tocca pausa, e' finito il lavoro
+      bool nextIsBreak = (pomoPhase != PH_WORK);
+      msg = nextIsBreak ? "LAVORO FINITO" : "PAUSA FINITA";
+    }
+    spr.setTextColor(blink ? TFT_YELLOW : DIM, TFT_BLACK);
+    spr.drawString(msg, SCR_W/2, 146, 2);
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString("PREMI KEY", SCR_W/2, 162, 2);
+  } else if (!editing) {
+    // stato discreto in basso (nascosto durante REGOLA)
+    const char* st = runSt == ST_RUNNING ? "IN CORSO"
+                   : runSt == ST_PAUSED  ? "PAUSA"
+                   : tmr                 ? "KEY AVVIA   TIENI: REGOLA"
+                                         : "PRONTO";
+    spr.setTextColor(DIM, TFT_BLACK);
+    spr.drawString(st, SCR_W/2, 156, 2);
+  }
 
   // contatore cicli pomodoro discreto
   if (pomo) {
@@ -489,10 +574,12 @@ void render() {
   spr.setTextDatum(TL_DATUM);
   spr.drawString(modeName(mode), 6, 6, 2);
 
-  // indicatore NTP discreto in alto a destra
-  spr.setTextDatum(TR_DATUM);
-  spr.setTextColor(timeSynced ? DIM : 0x4208, TFT_BLACK);
-  spr.drawString(timeSynced ? "NTP" : "---", SCR_W-6, 6, 2);
+  // indicatore NTP solo in OROLOGIO (altrove i countdown usano millis(), irrilevante)
+  if (mode == MODE_CLOCK) {
+    spr.setTextDatum(TR_DATUM);
+    spr.setTextColor(timeSynced ? DIM : 0x4208, TFT_BLACK);
+    spr.drawString(timeSynced ? "NTP" : "---", SCR_W-6, 6, 2);
+  }
 
   if (mode == MODE_CLOCK) {
     drawClock();
@@ -874,6 +961,9 @@ String statusJson() {
   j += ",\"elapsed\":" + String(elapsedMs() / 1000);
   j += ",\"target\":" + String(pomoTargetMs / 1000);
   j += ",\"done\":" + String(pomoDoneWork);
+  j += ",\"waiting\":"; j += (pomoWaiting ? "true" : "false");
+  j += ",\"ctimer\":" + String(cfgTimerMin);
+  j += ",\"tedit\":"; j += (timerEdit ? "true" : "false");
   j += ",\"cycles\":" + String(cfgCycles);
   j += ",\"cwork\":" + String(cfgWork);
   j += ",\"cbreak\":" + String(cfgBreak);
@@ -974,6 +1064,7 @@ void handleSave() {
   cfgBreak  = clampInt(server.arg("brk"),  1, 120, cfgBreak);
   cfgLong   = clampInt(server.arg("long"), 1, 120, cfgLong);
   cfgCycles = clampInt(server.arg("cyc"),  1, 12,  cfgCycles);
+  cfgTimerMin = clampInt(server.arg("timer"), TIMER_MIN_MIN, TIMER_MAX_MIN, cfgTimerMin);
   cfgGmtMin = clampInt(server.arg("gmt"), -12, 14, cfgGmtMin / 60) * 60;
   cfgDstMin = clampInt(server.arg("dst"),   0,  2, cfgDstMin / 60) * 60;
   cfgBright = clampInt(server.arg("bright"), 10, 255, cfgBright);
@@ -984,6 +1075,7 @@ void handleSave() {
   if (wifiUp) configTime(cfgGmtMin * 60, cfgDstMin * 60, NTP_SERVER);
   // applica subito se pomodoro fermo (no interruzione sessione attiva)
   if (mode == MODE_POMODORO && runSt == ST_IDLE) pomoSetPhase(pomoPhase);
+  timerSyncTarget();   // applica subito la durata timer se fermo
   Serial.printf("[CFG] work=%d brk=%d long=%d cyc=%d gmt=%d dst=%d bright=%d auto=%d\n",
                 cfgWork, cfgBreak, cfgLong, cfgCycles, cfgGmtMin / 60, cfgDstMin / 60, cfgBright, cfgAutoAdv);
   server.send(200, "application/json", "{\"ok\":true}");
@@ -1130,6 +1222,7 @@ void setup() {
   applyBright();              // applica luminosita' salvata
   loadState();
   pomoSetPhase(pomoPhase);   // imposta pomoTargetMs per la fase ripristinata
+  if (mode == MODE_TIMER) pomoTargetMs = (uint32_t)cfgTimerMin * 60000UL;  // target countdown
 
   // KEY tenuto all'accensione -> forza portale config WiFi
   // (non uso BOOT/GPIO0: e' strapping pin, tenuto al reset entra in download mode)
@@ -1159,15 +1252,26 @@ void loop() {
   // ogni evento tasto conta come attivita' (resetta il timer di sleep)
   if (ek != EV_NONE || eb != EV_NONE) lastActivityMs = millis();
 
-  // BOOT long apre/chiude la pagina INFO; mentre e' visibile una pressione breve la chiude
-  if (eb == EV_LONG) { showInfo = !showInfo; infoSince = millis(); }
+  // BOOT long apre/chiude la pagina INFO (non durante REGOLA durata timer)
+  if (eb == EV_LONG && !timerEdit) { showInfo = !showInfo; infoSince = millis(); }
   else if (showInfo) {
     if (ek == EV_SHORT || eb == EV_SHORT) showInfo = false;
+  } else if (timerEdit) {
+    // sotto-stato REGOLA: KEY=+1, BOOT=-1, KEY long=conferma
+    if (ek == EV_SHORT) timerAdjust(+1);
+    if (eb == EV_SHORT) timerAdjust(-1);
+    if (ek == EV_LONG)  timerConfirm();
   } else {
     if (ek == EV_SHORT) actionPrimary();
-    if (ek == EV_LONG)  actionStop();
+    if (ek == EV_LONG) {
+      // timer fermo: KEY tenuto entra in REGOLA durata; altrove ferma+salva
+      if (mode == MODE_TIMER && runSt == ST_IDLE) { timerEdit = true; timerSyncTarget(); }
+      else actionStop();
+    }
     if (eb == EV_SHORT) actionModeSwitch();
   }
+  // auto-uscita da REGOLA dopo 8s di inattivita' (salva la durata corrente)
+  if (timerEdit && (millis() - lastActivityMs > 8000)) timerConfirm();
   if (showInfo && (millis() - infoSince > 8000)) showInfo = false;   // auto-hide 8s
 
   // pomodoro: fine fase -> avanza
@@ -1183,8 +1287,23 @@ void loop() {
     }
   }
 
-  // auto-sleep: idle da troppo -> spegni backlight
+  // timer: countdown scaduto -> avvisa a display, attende KEY (niente auto-restart)
+  if (mode == MODE_TIMER && runSt == ST_RUNNING) {
+    if (elapsedMs() >= pomoTargetMs) {
+      tft.fillScreen(modeColor());
+      if (cfgBuzz && BUZZER_PIN >= 0) buzzPomodoro(true);
+      else delay(120);
+      tft.fillScreen(TFT_BLACK);
+      logSession("timer", pomoTargetMs);
+      runSt = ST_IDLE; accumMs = 0; pomoWaiting = true;
+      timerSyncTarget();
+      saveState();
+    }
+  }
+
+  // auto-sleep: idle da troppo -> spegni backlight (non mentre avvisa o regola)
   if (SLEEP_IDLE_MS > 0 && !screenAsleep && runSt == ST_IDLE && !showInfo
+      && !pomoWaiting && !timerEdit
       && (millis() - lastActivityMs) > SLEEP_IDLE_MS) {
     screenAsleep = true;
     ledcWrite(BL_CH, 0);

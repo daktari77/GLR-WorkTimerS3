@@ -1,7 +1,7 @@
 #pragma once
 
 // ===================== Firmware =====================
-#define FW_VERSION       "1.11.0"
+#define FW_VERSION       "1.12.0"
 
 // ===================== WiFi / NTP =====================
 // Config WiFi via portale captive (WiFiManager): niente credenziali hardcoded.
@@ -47,6 +47,11 @@
 #define POMO_BREAK_MIN   5
 #define POMO_LONGBREAK_MIN 15
 #define POMO_CYCLES_TO_LONG 4   // dopo N work, pausa lunga
+
+// ===================== Timer (countdown libero) =====================
+#define TIMER_DEFAULT_MIN 10   // durata di default del countdown (regolabile coi tasti)
+#define TIMER_MIN_MIN     1    // limite minimo (wrap)
+#define TIMER_MAX_MIN     180  // limite massimo (wrap)
 
 // ===================== Log =====================
 #define LOG_PATH         "/sessions.csv"
