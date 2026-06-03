@@ -638,6 +638,9 @@ font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:11px;borde
 .bat{text-align:center;font-size:11px;color:var(--label);letter-spacing:.04em;margin-top:6px}
 .check{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--label);margin:2px 0 4px;cursor:pointer}
 .check input{width:18px;height:18px;accent-color:var(--accent)}
+.check input:checked{animation:chk .25s cubic-bezier(.25,1,.5,1)}
+@keyframes chk{0%{transform:scale(1)}45%{transform:scale(1.22)}100%{transform:scale(1)}}
+.tools button.arm{border-color:var(--work);color:var(--work)}
 input[type=range]{padding:0;height:34px;accent-color:var(--accent)}
 .week{display:flex;align-items:flex-end;gap:6px;height:62px;margin-bottom:20px}
 .week .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
@@ -729,7 +732,7 @@ dstopt:["Nessuna (inverno)","Estate (+1h)","+2 ore"],tznow:"Ora sul dispositivo:
 bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",saveErr:"Errore, riprova",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
 offline:"Dispositivo non raggiungibile, riprovo…",wifidown:"WiFi spento. Riavvia tenendo KEY.",
-csv:"CSV",clear:"Cancella log",ota:"Firmware",wifioff:"Spegni WiFi",charging:"in carica",
+csv:"CSV",clear:"Cancella log",confirm:"Conferma?",ota:"Firmware",wifioff:"Spegni WiFi",charging:"in carica",
 start:"Avvia",pause:"Pausa",resume:"Riprendi",stop:"Stop",modeBtn:"Modo",
 askClear:"Cancellare tutto lo storico delle sessioni?",
 askWifi:"Spegnere il WiFi? La pagina non sara' piu' raggiungibile finche' non riavvii tenendo premuto KEY.",
@@ -744,7 +747,7 @@ dstopt:["None (winter)","Summer (+1h)","+2 hours"],tznow:"Time on device:",
 bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",saveErr:"Error, retry",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
 offline:"Device unreachable, retrying…",wifidown:"WiFi off. Reboot holding KEY.",
-csv:"CSV",clear:"Clear log",ota:"Firmware",wifioff:"WiFi off",charging:"charging",
+csv:"CSV",clear:"Clear log",confirm:"Confirm?",ota:"Firmware",wifioff:"WiFi off",charging:"charging",
 start:"Start",pause:"Pause",resume:"Resume",stop:"Stop",modeBtn:"Mode",
 askClear:"Clear the whole session history?",
 askWifi:"Turn WiFi off? The page won't be reachable until you reboot holding KEY.",
@@ -838,13 +841,19 @@ setTimeout(()=>sv.classList.remove("show"),1600);}
 catch(e){sv.classList.add("err","show");sv.textContent=T[lang].saveErr;
 setTimeout(()=>sv.classList.remove("show"),2600);}
 finally{btn.disabled=false;}});
-$("t-clear").onclick=async()=>{if(!confirm(T[lang].askClear))return;
-try{await fetch("/clearlog",{method:"POST"});loadLog();}catch(e){}};
+let armT;
+function confirmInline(btn,baseKey,run){if(btn.classList.contains("arm")){
+clearTimeout(armT);btn.classList.remove("arm");btn.textContent=T[lang][baseKey];run();return;}
+btn.classList.add("arm");btn.textContent=T[lang].confirm;
+armT=setTimeout(()=>{btn.classList.remove("arm");btn.textContent=T[lang][baseKey];},3000);}
+$("t-clear").onclick=()=>confirmInline($("t-clear"),"clear",async()=>{
+try{await fetch("/clearlog",{method:"POST"});loadLog();}catch(e){}});
 $("t-wifi").onclick=async()=>{if(!confirm(T[lang].askWifi))return;
 wifiOff=true;try{await fetch("/wifioff",{method:"POST"});}catch(e){}
 document.body.classList.add("off");const c=$("conn");c.textContent=T[lang].wifidown;c.classList.add("show");};
 $("lang").addEventListener("click",()=>{lang=lang=="it"?"en":"it";localStorage.setItem("wt_lang",lang);applyStatic();loadLog();});
 $("gmt").onchange=tzPreview;$("dst").onchange=tzPreview;
+console.log("%cWorkTimer%c · precise · instrument · quiet","color:oklch(.8 .17 152);font-weight:700","color:#888");
 buildGmt();applyStatic();poll();loadLog();setInterval(poll,1000);setInterval(loadLog,15000);
 </script></body></html>)HTML";
 
