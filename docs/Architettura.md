@@ -9,7 +9,7 @@ Nessuna classe oltre allo struct `Button`; lo stato è globale di modulo.
 
 ## Stato
 Due enum ortogonali, entrambi globali:
-- `Mode`: `MODE_CLOCK` / `MODE_STOPWATCH` / `MODE_POMODORO` (ciclato da BOOT, solo a fermo).
+- `Mode`: `MODE_CLOCK` / `MODE_STOPWATCH` / `MODE_POMODORO` / `MODE_TIMER` (ciclato da BOOT, solo a fermo).
 - `RunSt`: `ST_IDLE` / `ST_RUNNING` / `ST_PAUSED` (guidato da KEY).
 
 ## Conteggio tempo
@@ -26,7 +26,7 @@ senza eseguire azioni.
 NVS via `Preferences`. `saveState()` a ogni transizione e ogni `STATE_SAVE_MS` mentre attivo.
 Poiché `millis()` riparte al reboot, le sessioni ripristinate tornano in `ST_PAUSED`
 (tempo conservato, l'utente riprende con KEY), mai in corso.
-Config: `loadConfig()`/`saveConfig()` (chiavi `cwork/cbreak/clong/ccyc/cgmt/cdst/cauto/cbright/cbuzz`).
+Config: `loadConfig()`/`saveConfig()` (chiavi `cwork/cbreak/clong/ccyc/ctmr/cgmt/cdst/cauto/cbright/cbuzz`).
 
 ## Rendering
 Back-buffer `TFT_eSprite` 16-bit full-screen (`render()` pulisce → disegna → `pushSprite`),
