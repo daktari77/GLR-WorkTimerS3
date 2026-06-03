@@ -598,9 +598,12 @@ border:1px solid var(--line);color:var(--label)}
 hr{border:0;border-top:1px solid var(--line);margin:30px 0}
 .field{margin-bottom:16px}
 label{display:block;font-size:12px;color:var(--label);margin:0 0 6px;letter-spacing:.02em}
-input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--digit);font:inherit;
+input,select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--digit);font:inherit;
 font-size:18px;font-variant-numeric:tabular-nums;padding:11px 13px;border-radius:9px;min-height:46px}
-input:focus{outline:none;border-color:var(--accent)}
+select{cursor:pointer}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.tznow{font-size:12px;color:var(--label);letter-spacing:.04em;margin-top:11px}
+.tznow b{color:var(--digit);font-variant-numeric:tabular-nums}
 #save{margin-top:6px;width:100%;background:var(--accent);color:var(--accent-ink);border:0;font:inherit;
 font-size:15px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:13px;border-radius:9px;
 min-height:48px;cursor:pointer;transition:filter .12s}
@@ -684,9 +687,10 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 <div class=grp>
 <div class=grp-h id=g-time>Tempo</div>
 <div class=row2>
-<div class=field><label id=l-gmt for=gmt>Fuso</label><input id=gmt type=number min=-12 max=14 inputmode=numeric></div>
-<div class=field><label id=l-dst for=dst>Ora legale</label><input id=dst type=number min=0 max=2 inputmode=numeric></div>
+<div class=field><label id=l-gmt for=gmt>Fuso</label><select id=gmt></select></div>
+<div class=field><label id=l-dst for=dst>Ora legale</label><select id=dst></select></div>
 </div>
+<div class=tznow id=tzprev></div>
 </div>
 <div class=grp>
 <div class=grp-h id=g-disp>Display</div>
@@ -713,7 +717,8 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 const T={
 it:{status:"Stato",config:"Configurazione",sessions:"Sessioni",system:"Sistema",
 gpomo:"Pomodoro",gtime:"Tempo",gdisp:"Display",work:"Lavoro",brk:"Pausa",
-long:"Pausa lunga",cyc:"Cicli prima della pausa lunga",gmt:"Fuso orario (h)",dst:"Ora legale (+h)",
+long:"Pausa lunga",cyc:"Cicli prima della pausa lunga",gmt:"Fuso orario",dst:"Ora legale",
+dstopt:["Nessuna (inverno)","Estate (+1h)","+2 ore"],tznow:"Ora sul dispositivo:",
 bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
 csv:"CSV",clear:"Cancella log",ota:"Firmware",wifioff:"Spegni WiFi",charging:"in carica",
@@ -726,7 +731,8 @@ states:["Fermo","In corso","In pausa"],
 kinds:{"pomodoro-work":"Lavoro","pomodoro-partial":"Parziale","stopwatch":"Cronometro"}},
 en:{status:"Status",config:"Configuration",sessions:"Sessions",system:"System",
 gpomo:"Pomodoro",gtime:"Time",gdisp:"Display",work:"Work",brk:"Break",
-long:"Long break",cyc:"Cycles before long break",gmt:"Timezone (h)",dst:"DST (+h)",
+long:"Long break",cyc:"Cycles before long break",gmt:"Timezone",dst:"DST",
+dstopt:["None (winter)","Summer (+1h)","+2 hours"],tznow:"Time on device:",
 bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
 csv:"CSV",clear:"Clear log",ota:"Firmware",wifioff:"WiFi off",charging:"charging",
@@ -742,6 +748,14 @@ let lang=localStorage.getItem("wt_lang")||"it",cfgLoaded=false,last=null,prevPha
 function fmt(s){s=Math.max(0,Math.floor(s));let h=(s/3600)|0;s%=3600;let m=(s/60)|0,x=s%60;
 const p=n=>String(n).padStart(2,"0");return h>0?h+":"+p(m)+":"+p(x):p(m)+":"+p(x);}
 function hero(str){$("time").textContent=str;$("ghost").textContent=str.replace(/\d/g,"8");}
+function buildGmt(){const g=$("gmt");if(g.options.length)return;
+for(let i=14;i>=-12;i--){const o=document.createElement("option");o.value=i;o.textContent="UTC"+(i>=0?"+"+i:i);g.appendChild(o);}}
+function dstOpts(){const s=$("dst"),cur=s.value;s.textContent="";
+T[lang].dstopt.forEach((t,i)=>{const o=document.createElement("option");o.value=i;o.textContent=t;s.appendChild(o);});
+if(cur!=="")s.value=cur;}
+function tzPreview(){const g=+$("gmt").value||0,d=+$("dst").value||0,n=new Date();
+const u=n.getTime()+n.getTimezoneOffset()*60000,l=new Date(u+(g+d)*3600000);
+$("tzprev").innerHTML=T[lang].tznow+" <b>"+String(l.getHours()).padStart(2,"0")+":"+String(l.getMinutes()).padStart(2,"0")+"</b>";}
 function notify(msg){const n=$("note");n.textContent=msg;n.classList.add("show");
 clearTimeout(noteTimer);noteTimer=setTimeout(()=>n.classList.remove("show"),5000);
 try{if(window.Notification&&Notification.permission==="granted")new Notification("WorkTimer",{body:msg});}catch(e){}}
@@ -756,6 +770,7 @@ $("l-gmt").textContent=d.gmt;$("l-dst").textContent=d.dst;$("l-bright").textCont
 $("save").textContent=d.save;$("t-today").textContent=d.today;$("t-total").textContent=d.total;$("t-pomos").textContent=d.pomos;
 $("t-csv").textContent=d.csv;$("t-clear").textContent=d.clear;$("t-ota").textContent=d.ota;$("t-wifi").textContent=d.wifioff;
 $("c-stop").textContent=d.stop;$("c-mode").textContent=d.modeBtn;
+dstOpts();tzPreview();
 if(last)render(last);}
 function render(s){const d=T[lang];let str;
 if(s.mode===0){const n=new Date();str=String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");}
@@ -778,7 +793,7 @@ if(s.mode===2&&prevMode===2&&prevPhase!==null&&s.phase!==prevPhase)
 notify(s.phase===0?d.noteWork:(s.phase===2?d.noteLong:d.noteBreak));
 prevPhase=s.phase;prevMode=s.mode;
 if(!cfgLoaded){$("work").value=s.cwork;$("brk").value=s.cbreak;$("long").value=s.clong;$("cyc").value=s.cycles;
-$("gmt").value=s.cgmt;$("dst").value=s.cdst;$("bright").value=s.cbright;$("auto").checked=s.cauto;$("buzz").checked=s.cbuzz;cfgLoaded=true;}}
+$("gmt").value=s.cgmt;$("dst").value=s.cdst;$("bright").value=s.cbright;$("auto").checked=s.cauto;$("buzz").checked=s.cbuzz;tzPreview();cfgLoaded=true;}}
 async function poll(){try{const r=await fetch("/status",{cache:"no-store"});if(!r.ok)throw 0;
 last=await r.json();document.body.classList.remove("off");render(last);}
 catch(e){document.body.classList.add("off");}}
@@ -814,7 +829,8 @@ try{await fetch("/clearlog",{method:"POST"});loadLog();}catch(e){}};
 $("t-wifi").onclick=async()=>{if(!confirm(T[lang].askWifi))return;
 try{await fetch("/wifioff",{method:"POST"});}catch(e){}document.body.classList.add("off");};
 $("lang").addEventListener("click",()=>{lang=lang=="it"?"en":"it";localStorage.setItem("wt_lang",lang);applyStatic();loadLog();});
-applyStatic();poll();loadLog();setInterval(poll,1000);setInterval(loadLog,15000);
+$("gmt").onchange=tzPreview;$("dst").onchange=tzPreview;
+buildGmt();applyStatic();poll();loadLog();setInterval(poll,1000);setInterval(loadLog,15000);
 </script></body></html>)HTML";
 
 String htmlPage() { return FPSTR(PAGE_HTML); }
