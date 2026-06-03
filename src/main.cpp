@@ -786,6 +786,10 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 </div>
 </div>
 <div class=grp>
+<div class=grp-h id=g-timer>Timer</div>
+<div class=field><label id=l-timer for=timer>Durata</label><input id=timer type=number min=1 max=180 inputmode=numeric></div>
+</div>
+<div class=grp>
 <div class=grp-h id=g-time>Tempo</div>
 <div class=row2>
 <div class=field><label id=l-gmt for=gmt>Fuso</label><select id=gmt></select></div>
@@ -817,8 +821,8 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 <script>
 const T={
 it:{status:"Stato",config:"Configurazione",sessions:"Sessioni",system:"Sistema",
-gpomo:"Pomodoro",gtime:"Tempo",gdisp:"Display",work:"Lavoro",brk:"Pausa",
-long:"Pausa lunga",cyc:"Cicli",gmt:"Fuso orario",dst:"Ora legale",
+gpomo:"Pomodoro",gtime:"Tempo",gdisp:"Display",gtimer:"Timer",work:"Lavoro",brk:"Pausa",
+long:"Pausa lunga",cyc:"Cicli",timer:"Durata",gmt:"Fuso orario",dst:"Ora legale",
 dstopt:["Nessuna (inverno)","Estate (+1h)","+2 ore"],tznow:"Ora sul dispositivo:",
 bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",saveErr:"Errore, riprova",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
@@ -828,12 +832,12 @@ start:"Avvia",pause:"Pausa",resume:"Riprendi",stop:"Stop",modeBtn:"Modo",
 askClear:"Cancellare tutto lo storico delle sessioni?",
 askWifi:"Spegnere il WiFi? La pagina non sara' piu' raggiungibile finche' non riavvii tenendo premuto KEY.",
 noteWork:"Lavoro: si parte",noteBreak:"Pausa: stacca un attimo",noteLong:"Pausa lunga: ben fatto",
-modes:["Orologio","Cronometro","Pomodoro"],phases:["Lavoro","Pausa","Pausa lunga"],
+modes:["Orologio","Cronometro","Pomodoro","Timer"],phases:["Lavoro","Pausa","Pausa lunga"],
 states:["Fermo","In corso","In pausa"],
-kinds:{"pomodoro-work":"Lavoro","pomodoro-partial":"Parziale","stopwatch":"Cronometro"}},
+kinds:{"pomodoro-work":"Lavoro","pomodoro-partial":"Parziale","stopwatch":"Cronometro","timer":"Timer","timer-partial":"Parziale"}},
 en:{status:"Status",config:"Configuration",sessions:"Sessions",system:"System",
-gpomo:"Pomodoro",gtime:"Time",gdisp:"Display",work:"Work",brk:"Break",
-long:"Long break",cyc:"Cycles",gmt:"Timezone",dst:"DST",
+gpomo:"Pomodoro",gtime:"Time",gdisp:"Display",gtimer:"Timer",work:"Work",brk:"Break",
+long:"Long break",cyc:"Cycles",timer:"Duration",gmt:"Timezone",dst:"DST",
 dstopt:["None (winter)","Summer (+1h)","+2 hours"],tznow:"Time on device:",
 bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",saveErr:"Error, retry",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
@@ -843,9 +847,9 @@ start:"Start",pause:"Pause",resume:"Resume",stop:"Stop",modeBtn:"Mode",
 askClear:"Clear the whole session history?",
 askWifi:"Turn WiFi off? The page won't be reachable until you reboot holding KEY.",
 noteWork:"Work: go",noteBreak:"Break: step away",noteLong:"Long break: well done",
-modes:["Clock","Stopwatch","Pomodoro"],phases:["Work","Break","Long break"],
+modes:["Clock","Stopwatch","Pomodoro","Timer"],phases:["Work","Break","Long break"],
 states:["Idle","Running","Paused"],
-kinds:{"pomodoro-work":"Work","pomodoro-partial":"Partial","stopwatch":"Stopwatch"}}};
+kinds:{"pomodoro-work":"Work","pomodoro-partial":"Partial","stopwatch":"Stopwatch","timer":"Timer","timer-partial":"Partial"}}};
 const $=id=>document.getElementById(id);
 let lang=localStorage.getItem("wt_lang")||"it",cfgLoaded=false,last=null,prevPhase=null,prevMode=null,noteTimer,wifiOff=false;
 function fmt(s){s=Math.max(0,Math.floor(s));let h=(s/3600)|0;s%=3600;let m=(s/60)|0,x=s%60;
@@ -866,9 +870,10 @@ function askNotify(){try{if(window.Notification&&Notification.permission==="defa
 function applyStatic(){const d=T[lang];document.documentElement.lang=lang;
 $("lang").textContent=lang=="it"?"EN":"IT";
 $("h-status").textContent=d.status;$("h-config").textContent=d.config;$("h-sessions").textContent=d.sessions;$("h-system").textContent=d.system;
-$("g-pomo").textContent=d.gpomo;$("g-time").textContent=d.gtime;$("g-disp").textContent=d.gdisp;
+$("g-pomo").textContent=d.gpomo;$("g-time").textContent=d.gtime;$("g-disp").textContent=d.gdisp;$("g-timer").textContent=d.gtimer;
 $("l-work").textContent=d.work+" ("+d.min+")";$("l-brk").textContent=d.brk+" ("+d.min+")";
 $("l-long").textContent=d.long+" ("+d.min+")";$("l-cyc").textContent=d.cyc;
+$("l-timer").textContent=d.timer+" ("+d.min+")";
 $("l-gmt").textContent=d.gmt;$("l-dst").textContent=d.dst;$("l-bright").textContent=d.bright;$("l-auto").textContent=d.auto;$("l-buzz").textContent=d.buzz;
 $("save").textContent=d.save;$("t-today").textContent=d.today;$("t-total").textContent=d.total;$("t-pomos").textContent=d.pomos;
 $("t-csv").textContent=d.csv;$("t-clear").textContent=d.clear;$("t-ota").textContent=d.ota;$("t-wifi").textContent=d.wifioff;
@@ -877,7 +882,7 @@ dstOpts();tzPreview();
 if(last)render(last);}
 function render(s){const d=T[lang];let str;
 if(s.mode===0){const n=new Date();str=String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");}
-else if(s.mode===2){str=fmt(s.target-s.elapsed);}else{str=fmt(s.elapsed);}
+else if(s.mode===2||s.mode===3){str=fmt(s.target-s.elapsed);}else{str=fmt(s.elapsed);}
 hero(str);
 $("mode").textContent=d.modes[s.mode]||"";
 const ph=$("phase");ph.textContent=s.mode===2?(d.phases[s.phase]||""):"";
@@ -895,7 +900,7 @@ $("bat").textContent=p+"% · "+(s.batmv/1000).toFixed(2)+" V"+(s.charging?" · "
 if(s.mode===2&&prevMode===2&&prevPhase!==null&&s.phase!==prevPhase)
 notify(s.phase===0?d.noteWork:(s.phase===2?d.noteLong:d.noteBreak));
 prevPhase=s.phase;prevMode=s.mode;
-if(!cfgLoaded){$("work").value=s.cwork;$("brk").value=s.cbreak;$("long").value=s.clong;$("cyc").value=s.cycles;
+if(!cfgLoaded){$("work").value=s.cwork;$("brk").value=s.cbreak;$("long").value=s.clong;$("cyc").value=s.cycles;$("timer").value=s.ctimer;
 $("gmt").value=s.cgmt;$("dst").value=s.cdst;$("bright").value=s.cbright;$("auto").checked=s.cauto;$("buzz").checked=s.cbuzz;tzPreview();cfgLoaded=true;}}
 async function poll(){try{const r=await fetch("/status",{cache:"no-store"});if(!r.ok)throw 0;
 last=await r.json();document.body.classList.remove("off");$("conn").classList.remove("show");render(last);}
@@ -922,7 +927,7 @@ $("c-primary").onclick=()=>cmd("start");
 $("c-stop").onclick=()=>cmd("stop");
 $("c-mode").onclick=()=>cmd("mode");
 $("save").addEventListener("click",async()=>{askNotify();
-const body=new URLSearchParams({work:$("work").value,brk:$("brk").value,long:$("long").value,cyc:$("cyc").value,
+const body=new URLSearchParams({work:$("work").value,brk:$("brk").value,long:$("long").value,cyc:$("cyc").value,timer:$("timer").value,
 gmt:$("gmt").value,dst:$("dst").value,bright:$("bright").value,auto:$("auto").checked?"1":"0",buzz:$("buzz").checked?"1":"0"});
 const sv=$("saved"),btn=$("save");btn.disabled=true;
 try{const r=await fetch("/save",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
