@@ -602,7 +602,7 @@ input,select{width:100%;background:var(--panel);border:1px solid var(--line);col
 font-size:18px;font-variant-numeric:tabular-nums;padding:11px 13px;border-radius:9px;min-height:46px}
 select{cursor:pointer}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
-.tznow{font-size:12px;color:var(--label);letter-spacing:.04em;margin-top:11px}
+.tznow{font-size:12px;color:var(--label);letter-spacing:.04em;margin-top:12px}
 .tznow b{color:var(--digit);font-variant-numeric:tabular-nums}
 #save{margin-top:6px;width:100%;background:var(--accent);color:var(--accent-ink);border:0;font:inherit;
 font-size:15px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:13px;border-radius:9px;
@@ -611,9 +611,10 @@ min-height:48px;cursor:pointer;transition:filter .12s}
 .saved{display:block;text-align:center;font-size:12px;color:var(--accent);margin-top:12px;opacity:0;
 letter-spacing:.1em;text-transform:uppercase;transition:opacity .25s}
 .saved.show{opacity:1}
+.saved.err{color:var(--work)}
 .grp{margin-bottom:26px}
-.grp-h{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--label);opacity:.72;
-margin:0 0 13px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+.grp-h{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--label);
+margin:0 0 12px;padding-bottom:7px;border-bottom:1px solid var(--line)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .row2:last-child{margin-bottom:0}
 .row2 .field{margin:0}
@@ -642,7 +643,7 @@ input[type=range]{padding:0;height:34px;accent-color:var(--accent)}
 .week .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
 .week .bbar{width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
 .week .bbar.z{background:var(--line);opacity:1}
-.week .dl{font-size:9px;color:var(--label)}
+.week .dl{font-size:10px;color:var(--label)}
 .tools{display:flex;gap:10px;flex-wrap:wrap}
 .tools a,.tools button{flex:1;text-align:center;background:none;border:1px solid var(--line);color:var(--label);
 font:inherit;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:10px;border-radius:8px;min-height:42px;
@@ -717,9 +718,9 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 const T={
 it:{status:"Stato",config:"Configurazione",sessions:"Sessioni",system:"Sistema",
 gpomo:"Pomodoro",gtime:"Tempo",gdisp:"Display",work:"Lavoro",brk:"Pausa",
-long:"Pausa lunga",cyc:"Cicli prima della pausa lunga",gmt:"Fuso orario",dst:"Ora legale",
+long:"Pausa lunga",cyc:"Cicli",gmt:"Fuso orario",dst:"Ora legale",
 dstopt:["Nessuna (inverno)","Estate (+1h)","+2 ore"],tznow:"Ora sul dispositivo:",
-bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",min:"min",
+bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",saveErr:"Errore, riprova",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
 csv:"CSV",clear:"Cancella log",ota:"Firmware",wifioff:"Spegni WiFi",charging:"in carica",
 start:"Avvia",pause:"Pausa",resume:"Riprendi",stop:"Stop",modeBtn:"Modo",
@@ -731,9 +732,9 @@ states:["Fermo","In corso","In pausa"],
 kinds:{"pomodoro-work":"Lavoro","pomodoro-partial":"Parziale","stopwatch":"Cronometro"}},
 en:{status:"Status",config:"Configuration",sessions:"Sessions",system:"System",
 gpomo:"Pomodoro",gtime:"Time",gdisp:"Display",work:"Work",brk:"Break",
-long:"Long break",cyc:"Cycles before long break",gmt:"Timezone",dst:"DST",
+long:"Long break",cyc:"Cycles",gmt:"Timezone",dst:"DST",
 dstopt:["None (winter)","Summer (+1h)","+2 hours"],tznow:"Time on device:",
-bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",min:"min",
+bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",saveErr:"Error, retry",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
 csv:"CSV",clear:"Clear log",ota:"Firmware",wifioff:"WiFi off",charging:"charging",
 start:"Start",pause:"Pause",resume:"Resume",stop:"Stop",modeBtn:"Mode",
@@ -821,9 +822,13 @@ $("c-mode").onclick=()=>cmd("mode");
 $("save").addEventListener("click",async()=>{askNotify();
 const body=new URLSearchParams({work:$("work").value,brk:$("brk").value,long:$("long").value,cyc:$("cyc").value,
 gmt:$("gmt").value,dst:$("dst").value,bright:$("bright").value,auto:$("auto").checked?"1":"0",buzz:$("buzz").checked?"1":"0"});
-try{await fetch("/save",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
-const sv=$("saved");sv.textContent=T[lang].saved;sv.classList.add("show");
-setTimeout(()=>sv.classList.remove("show"),1600);}catch(e){}});
+const sv=$("saved");
+try{const r=await fetch("/save",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+if(!r.ok)throw 0;
+sv.classList.remove("err");sv.textContent=T[lang].saved;sv.classList.add("show");
+setTimeout(()=>sv.classList.remove("show"),1600);}
+catch(e){sv.classList.add("err","show");sv.textContent=T[lang].saveErr;
+setTimeout(()=>sv.classList.remove("show"),2600);}});
 $("t-clear").onclick=async()=>{if(!confirm(T[lang].askClear))return;
 try{await fetch("/clearlog",{method:"POST"});loadLog();}catch(e){}};
 $("t-wifi").onclick=async()=>{if(!confirm(T[lang].askWifi))return;
