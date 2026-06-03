@@ -347,6 +347,15 @@ uint16_t phaseColor() {
 // grigio discreto per etichette (leggibile ma defilato)
 static const uint16_t DIM = 0x8410;   // ~ rgb(130,130,130)
 
+// colore cifre per modo: orologio=ciano, cronometro=ambra, pomodoro=colore fase
+uint16_t modeColor() {
+  switch (mode) {
+    case MODE_STOPWATCH: return tft.color565(255, 190, 60);  // ambra
+    case MODE_POMODORO:  return phaseColor();                // rosso/verde/blu per fase
+    default:             return tft.color565(90, 220, 230);  // ciano (orologio)
+  }
+}
+
 // disegna il tempo grande centrato, scegliendo il font numerico piu' grande
 // che entra in larghezza (font8 ~75px, font7 ~48px LCD).
 void drawBigTime(const char* str, int cy, uint16_t col) {
@@ -362,17 +371,17 @@ void drawClock() {
   char buf[40];
   if (timeSynced) {
     time_t t = time(nullptr); struct tm tmv; localtime_r(&t, &tmv);
-    // ora grande bianca
+    // ora grande bianca (hero)
     strftime(buf, sizeof(buf), "%H:%M", &tmv);
-    drawBigTime(buf, 78, TFT_WHITE);
-    // data discreta
+    drawBigTime(buf, 76, modeColor());
+    // data sotto, livello intermedio (font4)
     strftime(buf, sizeof(buf), "%a %d %b %Y", &tmv);
     spr.setTextColor(DIM, TFT_BLACK);
-    spr.drawString(buf, SCR_W/2, 150, 2);
+    spr.drawString(buf, SCR_W/2, 138, 4);
   } else {
-    drawBigTime("00:00", 78, DIM);
+    drawBigTime("00:00", 76, DIM);
     spr.setTextColor(DIM, TFT_BLACK);
-    spr.drawString("no NTP - tieni KEY al boot", SCR_W/2, 150, 2);
+    spr.drawString("no NTP - tieni KEY al boot", SCR_W/2, 138, 2);
   }
 }
 
@@ -395,7 +404,7 @@ void drawTimer() {
   } else {
     fmtHMS(elapsedMs(), buf, sizeof(buf));
   }
-  drawBigTime(buf, 82, TFT_WHITE);
+  drawBigTime(buf, 82, modeColor());
 
   // barra progresso pomodoro: linea sottile discreta
   if (pomo) {
@@ -487,17 +496,12 @@ void render() {
 
   if (mode == MODE_CLOCK) {
     drawClock();
-    // numero sessioni loggate (discreto)
+    // numero sessioni loggate (discreto, in basso a sinistra)
     char buf[24];
     snprintf(buf, sizeof(buf), "log %d", countSessions());
     spr.setTextColor(DIM, TFT_BLACK);
     spr.setTextDatum(BL_DATUM);
-    spr.drawString(buf, 6, SCR_H-4, 2);
-    // IP per web config (discreto, in basso a destra)
-    if (wifiUp) {
-      spr.setTextDatum(BR_DATUM);
-      spr.drawString(ipStr, SCR_W-6, SCR_H-4, 2);
-    }
+    spr.drawString(buf, 6, SCR_H-6, 2);
   } else {
     drawTimer();
   }

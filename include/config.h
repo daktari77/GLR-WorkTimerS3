@@ -1,7 +1,7 @@
 #pragma once
 
 // ===================== Firmware =====================
-#define FW_VERSION       "1.9.0"
+#define FW_VERSION       "1.11.0"
 
 // ===================== WiFi / NTP =====================
 // Config WiFi via portale captive (WiFiManager): niente credenziali hardcoded.
