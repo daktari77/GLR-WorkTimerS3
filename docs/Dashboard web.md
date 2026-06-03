@@ -11,7 +11,7 @@ Nessun asset esterno, niente CDN o framework; bilingue IT/EN gestito client-side
 Apri `http://worktimer.local` (o `http://<IP>`) dalla stessa rete WiFi.
 
 ## Stato
-- Tempo grande: ora (orologio), trascorso (cronometro), rimanente (pomodoro).
+- Tempo grande: ora (orologio), trascorso (cronometro), rimanente (pomodoro e timer).
 - Modalità, fase pomodoro, stato (in corso / pausa / fermo), pallini dei cicli.
 - **Controllo remoto**: Avvia/Pausa/Riprendi, Stop, Modo (come i tasti, da browser).
 - Riga con `worktimer.local`, IP, **versione firmware**, batteria.
@@ -19,7 +19,7 @@ Apri `http://worktimer.local` (o `http://<IP>`) dalla stessa rete WiFi.
   tu il WiFi lo dice esplicitamente.
 
 ## Configurazione
-Campi raggruppati in **Pomodoro / Tempo / Display**, poi **Salva** (scrive su NVS).
+Campi raggruppati in **Pomodoro / Timer / Tempo / Display**, poi **Salva** (scrive su NVS).
 Dettaglio in [[Configurazione]]. Il fuso si imposta da menu con **anteprima ora live**.
 
 ## Sessioni

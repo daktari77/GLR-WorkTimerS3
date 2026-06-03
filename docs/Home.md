@@ -5,7 +5,7 @@ tags: [worktimer, moc]
 # WorkTimer · Mappa
 
 Knowledge base del firmware **GLR-WorkTimer** per LilyGo T-Display S3.
-Firmware corrente: **v1.11.0**.
+Firmware corrente: **v1.12.0**.
 
 ## Per l'utente
 - [[Modalità]] — orologio, cronometro, pomodoro e i colori per modo
@@ -21,5 +21,5 @@ Firmware corrente: **v1.11.0**.
 - Riferimento sintetico: [[README]]
 
 ## In una riga
-Tre modalità su un LCD nero con cifre 7-segmenti grandi tinte per modo, due tasti,
+Quattro modalità su un LCD nero con cifre 7-segmenti grandi tinte per modo, due tasti,
 stato persistente su NVS, e una dashboard web autonoma bilingue servita dal device.

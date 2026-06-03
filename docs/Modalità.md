@@ -4,7 +4,7 @@ tags: [worktimer, uso]
 
 # Modalità
 
-Tre modalità, ciclate da **BOOT** breve solo a timer fermo (vedi [[Comandi]]).
+Quattro modalità, ciclate da **BOOT** breve solo a timer fermo (vedi [[Comandi]]).
 Ogni modalità tinge le cifre di un colore diverso per riconoscerla a colpo d'occhio.
 
 | Modalità | Colore cifre | Cosa fa |
@@ -12,6 +12,7 @@ Ogni modalità tinge le cifre di un colore diverso per riconoscerla a colpo d'oc
 | **Orologio** | ciano | Ora e data via NTP. Stato di riposo. |
 | **Cronometro** | ambra | Conta in avanti. Start/pausa/riprendi, salva a stop. |
 | **Pomodoro** | colore fase | Lavoro/pausa/pausa lunga a cicli. |
+| **Timer** | magenta | Countdown a durata libera, regolabile coi tasti. |
 
 Colore guidato da `modeColor()`; per il pomodoro segue la fase: **rosso** lavoro,
 **verde** pausa, **blu** pausa lunga.
@@ -30,6 +31,18 @@ A ogni cambio fase lo schermo lampeggia e, se attivo, suona il buzzer ([[Hardwar
 Durate e avanzamento si regolano dalla [[Configurazione]].
 
 **Avanzamento**: automatico, oppure si ferma in pausa e attende **KEY** (impostabile).
+Con avanzamento manuale, a fine fase lo schermo mostra un avviso lampeggiante
+(**LAVORO FINITO** / **PAUSA FINITA**) e attende **KEY** per la fase successiva.
+
+## Timer
+Countdown a durata libera (default 10 min, 1–180). A timer fermo:
+- **KEY** breve avvia il conto alla rovescia;
+- **KEY** tenuto entra in **REGOLA DURATA** (vedi [[Comandi#Timer REGOLA]]);
+- **BOOT** breve cambia modalità.
+
+A countdown scaduto: flash (più buzzer se attivo), avviso **TEMPO SCADUTO · PREMI KEY**,
+la sessione viene loggata come `timer` e si torna fermi. Nessun riavvio automatico.
+La durata si imposta anche dalla [[Dashboard web]] (gruppo **Timer**).
 
 ## Schermo a riposo
 Dopo 2 minuti da fermo il backlight si spegne (`SLEEP_IDLE_MS`). Un tasto qualsiasi

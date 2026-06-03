@@ -17,6 +17,20 @@ Polling con debounce, niente interrupt (vedi [[Architettura#Bottoni]]).
 
 La modalità cambia solo a timer fermo, così non si interrompe una sessione attiva.
 
+## Timer: REGOLA
+Nel modo [[Modalità#Timer|Timer]] a countdown fermo, **KEY** tenuto apre **REGOLA DURATA**.
+Le etichette compaiono accanto alla posizione fisica dei tasti (KEY in alto a destra,
+BOOT in basso a destra):
+
+| Tasto | Pressione | Effetto in REGOLA |
+|---|---|---|
+| KEY | breve | +1 minuto |
+| BOOT | breve | −1 minuto |
+| KEY | lunga | Conferma e salva la durata |
+
+I minuti vanno da 1 a 180 con wrap-around. Si esce anche da soli dopo 8 secondi
+di inattività (la durata corrente viene salvata).
+
 ## BOOT lungo: INFO
 Mostra **batteria** (% e tensione, o "USB"), **ricarica** SI/NO, **IP**, **versione firmware**.
 Si chiude con una pressione breve o da sola dopo 8 secondi.

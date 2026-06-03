@@ -9,6 +9,8 @@ dalla [[Dashboard web]] e persistiti su NVS (`Preferences`). I valori NVS vincon
 
 ## Dalla dashboard (consigliato)
 Gruppo **Pomodoro**: Lavoro / Pausa / Pausa lunga (minuti), Cicli prima della pausa lunga.
+Gruppo **Timer**: Durata del countdown (minuti, 1–180). Si imposta anche sul device
+coi tasti, vedi [[Comandi#Timer REGOLA]].
 Gruppo **Tempo**: Fuso orario e Ora legale da menu, con **anteprima dell'ora** che avrà il
 device, così regoli finché coincide col tuo orologio (niente offset da indovinare).
 Gruppo **Display**: Luminosità (cursore, immediato dopo Salva), Avanzamento automatico,
@@ -22,6 +24,7 @@ verde, o errore in rosso.
 |---|---|
 | `FW_VERSION` | versione mostrata su INFO e dashboard |
 | `POMO_WORK_MIN` / `POMO_BREAK_MIN` / `POMO_LONGBREAK_MIN` / `POMO_CYCLES_TO_LONG` | durate e cicli pomodoro |
+| `TIMER_DEFAULT_MIN` / `TIMER_MIN_MIN` / `TIMER_MAX_MIN` | durata countdown di default e limiti (wrap) |
 | `GMT_OFFSET_SEC` / `DST_OFFSET_SEC` | fuso e ora legale di default |
 | `SCREEN_BRIGHT` | luminosità backlight di default |
 | `SLEEP_IDLE_MS` | timeout sleep schermo (default 2 min) |
