@@ -1,7 +1,7 @@
 #pragma once
 
 // ===================== Firmware =====================
-#define FW_VERSION       "1.3.0"
+#define FW_VERSION       "1.4.0"
 
 // ===================== WiFi / NTP =====================
 // Config WiFi via portale captive (WiFiManager): niente credenziali hardcoded.
@@ -32,6 +32,11 @@
 // ===================== Schermo / comportamento =====================
 #define SCREEN_BRIGHT    200  // luminosita' backlight di default (0-255)
 #define POMO_AUTO_ADV    1    // 1 = pomodoro avanza da solo tra le fasi
+#define SLEEP_IDLE_MS    120000  // spegni schermo dopo N ms da idle (0 = mai)
+
+// ===================== Buzzer (passivo, fine pomodoro) =====================
+#define BUZZER_PIN       16   // GPIO buzzer passivo (-1 = nessuno collegato)
+#define BUZZER_DEFAULT   0    // 1 = beep abilitato di default (abilita da web quando lo colleghi)
 
 // ===================== Bottoni =====================
 #define DEBOUNCE_MS      40

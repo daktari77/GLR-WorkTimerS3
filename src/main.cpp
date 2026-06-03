@@ -58,9 +58,34 @@ int  cfgGmtMin  = GMT_OFFSET_SEC / 60;   // offset fuso (minuti)
 int  cfgDstMin  = DST_OFFSET_SEC / 60;   // offset ora legale (minuti)
 bool cfgAutoAdv = POMO_AUTO_ADV;         // pomodoro avanza da solo tra le fasi
 int  cfgBright  = SCREEN_BRIGHT;         // luminosita' backlight 0-255
-static const uint8_t BL_CH = 0;          // canale LEDC backlight
+bool cfgBuzz    = BUZZER_DEFAULT;        // buzzer fine pomodoro
+static const uint8_t BL_CH  = 0;         // canale LEDC backlight
+static const uint8_t BUZ_CH = 1;         // canale LEDC buzzer
+
+// stato sleep schermo (idle -> backlight off, wake su tasto)
+bool     screenAsleep   = false;
+uint32_t lastActivityMs = 0;
 
 void applyBright() { ledcWrite(BL_CH, cfgBright); }
+
+// buzzer passivo: un tono per `ms` ms (no-op se disabilitato o pin assente)
+void buzzTone(uint16_t freq, uint16_t ms) {
+  if (!cfgBuzz || BUZZER_PIN < 0) return;
+  ledcWriteTone(BUZ_CH, freq);
+  delay(ms);
+  ledcWriteTone(BUZ_CH, 0);
+}
+// melodia fine fase: salita se finita una fase di lavoro, discesa per le pause
+void buzzPomodoro(bool workEnded) {
+  if (workEnded) { buzzTone(880, 120); buzzTone(1320, 200); }
+  else           { buzzTone(660, 120); buzzTone(440, 200); }
+}
+
+// risveglia lo schermo dallo stato attivo
+void wakeScreen() {
+  if (screenAsleep) { screenAsleep = false; applyBright(); }
+  lastActivityMs = millis();
+}
 
 // lettura batteria: mV al pacco (partitore /2), media di 8 campioni
 int batteryMvRaw() {
@@ -218,6 +243,7 @@ void loadConfig() {
   cfgDstMin  = prefs.getInt ("cdst",    DST_OFFSET_SEC / 60);
   cfgAutoAdv = prefs.getBool("cauto",   POMO_AUTO_ADV);
   cfgBright  = prefs.getInt ("cbright", SCREEN_BRIGHT);
+  cfgBuzz    = prefs.getBool("cbuzz",   BUZZER_DEFAULT);
 }
 
 void saveConfig() {
@@ -229,6 +255,7 @@ void saveConfig() {
   prefs.putInt ("cdst",    cfgDstMin);
   prefs.putBool("cauto",   cfgAutoAdv);
   prefs.putInt ("cbright", cfgBright);
+  prefs.putBool("cbuzz",   cfgBuzz);
 }
 
 // ---------------- Pomodoro logica ----------------
@@ -644,6 +671,7 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 <div class=field><label id=l-dst for=dst>Ora legale</label><input id=dst type=number min=0 max=2 inputmode=numeric></div>
 <div class=field><label id=l-bright for=bright>Luminosita</label><input id=bright type=range min=10 max=255></div>
 <label class=check for=auto><input id=auto type=checkbox><span id=l-auto>Avanzamento automatico</span></label>
+<label class=check for=buzz><input id=buzz type=checkbox><span id=l-buzz>Buzzer fine pomodoro</span></label>
 <button id=save>Salva</button><span class=saved id=saved></span>
 </section>
 <hr>
@@ -663,7 +691,7 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 const T={
 it:{status:"Stato",config:"Configurazione",sessions:"Sessioni",system:"Sistema",work:"Lavoro",brk:"Pausa",
 long:"Pausa lunga",cyc:"Cicli prima della pausa lunga",gmt:"Fuso orario (h)",dst:"Ora legale (+h)",
-bright:"Luminosita",auto:"Avanzamento automatico",save:"Salva",saved:"Salvato",min:"min",
+bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
 csv:"CSV",clear:"Cancella log",ota:"Firmware",wifioff:"Spegni WiFi",charging:"in carica",
 start:"Avvia",pause:"Pausa",resume:"Riprendi",stop:"Stop",modeBtn:"Modo",
@@ -675,7 +703,7 @@ states:["Fermo","In corso","In pausa"],
 kinds:{"pomodoro-work":"Lavoro","pomodoro-partial":"Parziale","stopwatch":"Cronometro"}},
 en:{status:"Status",config:"Configuration",sessions:"Sessions",system:"System",work:"Work",brk:"Break",
 long:"Long break",cyc:"Cycles before long break",gmt:"Timezone (h)",dst:"DST (+h)",
-bright:"Brightness",auto:"Auto-advance",save:"Save",saved:"Saved",min:"min",
+bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
 csv:"CSV",clear:"Clear log",ota:"Firmware",wifioff:"WiFi off",charging:"charging",
 start:"Start",pause:"Pause",resume:"Resume",stop:"Stop",modeBtn:"Mode",
@@ -699,7 +727,7 @@ $("lang").textContent=lang=="it"?"EN":"IT";
 $("h-status").textContent=d.status;$("h-config").textContent=d.config;$("h-sessions").textContent=d.sessions;$("h-system").textContent=d.system;
 $("l-work").textContent=d.work+" ("+d.min+")";$("l-brk").textContent=d.brk+" ("+d.min+")";
 $("l-long").textContent=d.long+" ("+d.min+")";$("l-cyc").textContent=d.cyc;
-$("l-gmt").textContent=d.gmt;$("l-dst").textContent=d.dst;$("l-bright").textContent=d.bright;$("l-auto").textContent=d.auto;
+$("l-gmt").textContent=d.gmt;$("l-dst").textContent=d.dst;$("l-bright").textContent=d.bright;$("l-auto").textContent=d.auto;$("l-buzz").textContent=d.buzz;
 $("save").textContent=d.save;$("t-today").textContent=d.today;$("t-total").textContent=d.total;$("t-pomos").textContent=d.pomos;
 $("t-csv").textContent=d.csv;$("t-clear").textContent=d.clear;$("t-ota").textContent=d.ota;$("t-wifi").textContent=d.wifioff;
 $("c-stop").textContent=d.stop;$("c-mode").textContent=d.modeBtn;
@@ -725,7 +753,7 @@ if(s.mode===2&&prevMode===2&&prevPhase!==null&&s.phase!==prevPhase)
 notify(s.phase===0?d.noteWork:(s.phase===2?d.noteLong:d.noteBreak));
 prevPhase=s.phase;prevMode=s.mode;
 if(!cfgLoaded){$("work").value=s.cwork;$("brk").value=s.cbreak;$("long").value=s.clong;$("cyc").value=s.cycles;
-$("gmt").value=s.cgmt;$("dst").value=s.cdst;$("bright").value=s.cbright;$("auto").checked=s.cauto;cfgLoaded=true;}}
+$("gmt").value=s.cgmt;$("dst").value=s.cdst;$("bright").value=s.cbright;$("auto").checked=s.cauto;$("buzz").checked=s.cbuzz;cfgLoaded=true;}}
 async function poll(){try{const r=await fetch("/status",{cache:"no-store"});if(!r.ok)throw 0;
 last=await r.json();document.body.classList.remove("off");render(last);}
 catch(e){document.body.classList.add("off");}}
@@ -752,7 +780,7 @@ $("c-stop").onclick=()=>cmd("stop");
 $("c-mode").onclick=()=>cmd("mode");
 $("save").addEventListener("click",async()=>{askNotify();
 const body=new URLSearchParams({work:$("work").value,brk:$("brk").value,long:$("long").value,cyc:$("cyc").value,
-gmt:$("gmt").value,dst:$("dst").value,bright:$("bright").value,auto:$("auto").checked?"1":"0"});
+gmt:$("gmt").value,dst:$("dst").value,bright:$("bright").value,auto:$("auto").checked?"1":"0",buzz:$("buzz").checked?"1":"0"});
 try{await fetch("/save",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
 const sv=$("saved");sv.textContent=T[lang].saved;sv.classList.add("show");
 setTimeout(()=>sv.classList.remove("show"),1600);}catch(e){}});
@@ -785,6 +813,7 @@ String statusJson() {
   j += ",\"cdst\":" + String(cfgDstMin / 60);
   j += ",\"cauto\":"; j += (cfgAutoAdv ? "true" : "false");
   j += ",\"cbright\":" + String(cfgBright);
+  j += ",\"cbuzz\":"; j += (cfgBuzz ? "true" : "false");
   int bmv = batteryMv();
   j += ",\"batmv\":" + String(bmv);
   j += ",\"charging\":"; j += (bmv >= BAT_MV_FULL ? "true" : "false");
@@ -880,6 +909,7 @@ void handleSave() {
   cfgDstMin = clampInt(server.arg("dst"),   0,  2, cfgDstMin / 60) * 60;
   cfgBright = clampInt(server.arg("bright"), 10, 255, cfgBright);
   if (server.hasArg("auto")) cfgAutoAdv = (server.arg("auto") == "1");
+  if (server.hasArg("buzz")) cfgBuzz    = (server.arg("buzz") == "1");
   saveConfig();
   applyBright();
   if (wifiUp) configTime(cfgGmtMin * 60, cfgDstMin * 60, NTP_SERVER);
@@ -1014,6 +1044,14 @@ void setup() {
   ledcAttachPin(TFT_BL, BL_CH);
   applyBright();
 
+  // buzzer passivo su canale LEDC dedicato (tono variabile)
+  if (BUZZER_PIN >= 0) {
+    ledcSetup(BUZ_CH, 2000, 8);
+    ledcAttachPin(BUZZER_PIN, BUZ_CH);
+    ledcWriteTone(BUZ_CH, 0);
+  }
+  lastActivityMs = millis();
+
   fsReady = LittleFS.begin(true);
   if (!fsReady) Serial.println("[FS] mount fail");
 
@@ -1037,6 +1075,21 @@ void loop() {
   // bottoni
   BtnEvent ek = pollButton(bKey);
   BtnEvent eb = pollButton(bBoot);
+
+  // schermo addormentato: qualunque pressione risveglia e viene "ingoiata"
+  // (longFired=true impedisce a EV_SHORT/EV_LONG di partire al rilascio)
+  if (screenAsleep) {
+    bool anyPress = (ek != EV_NONE) || (eb != EV_NONE)
+                 || (bKey.stable == LOW) || (bBoot.stable == LOW);
+    if (anyPress) { bKey.longFired = true; bBoot.longFired = true; wakeScreen(); }
+    if (wifiUp) server.handleClient();
+    delay(33);
+    return;                       // schermo spento: salto render, risparmio CPU
+  }
+
+  // ogni evento tasto conta come attivita' (resetta il timer di sleep)
+  if (ek != EV_NONE || eb != EV_NONE) lastActivityMs = millis();
+
   // BOOT long apre/chiude la pagina INFO; mentre e' visibile una pressione breve la chiude
   if (eb == EV_LONG) { showInfo = !showInfo; infoSince = millis(); }
   else if (showInfo) {
@@ -1051,12 +1104,21 @@ void loop() {
   // pomodoro: fine fase -> avanza
   if (mode == MODE_POMODORO && runSt == ST_RUNNING) {
     if (elapsedMs() >= pomoTargetMs) {
-      // flash schermo come "beep" visivo
+      bool workEnded = (pomoPhase == PH_WORK);
+      // flash schermo come "beep" visivo + beep sonoro
       tft.fillScreen(phaseColor());
-      delay(120);
+      if (cfgBuzz && BUZZER_PIN >= 0) buzzPomodoro(workEnded);  // ~320ms di tono
+      else delay(120);                                         // altrimenti flash visivo
       tft.fillScreen(TFT_BLACK);
       pomoAdvance();
     }
+  }
+
+  // auto-sleep: idle da troppo -> spegni backlight
+  if (SLEEP_IDLE_MS > 0 && !screenAsleep && runSt == ST_IDLE && !showInfo
+      && (millis() - lastActivityMs) > SLEEP_IDLE_MS) {
+    screenAsleep = true;
+    ledcWrite(BL_CH, 0);
   }
 
   // web config
