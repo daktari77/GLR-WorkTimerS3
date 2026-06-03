@@ -608,6 +608,13 @@ min-height:48px;cursor:pointer;transition:filter .12s}
 .saved{display:block;text-align:center;font-size:12px;color:var(--accent);margin-top:12px;opacity:0;
 letter-spacing:.1em;text-transform:uppercase;transition:opacity .25s}
 .saved.show{opacity:1}
+.grp{margin-bottom:26px}
+.grp-h{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--label);opacity:.72;
+margin:0 0 13px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.row2:last-child{margin-bottom:0}
+.row2 .field{margin:0}
+.grp .check:first-of-type{margin-top:12px}
 .totals{display:flex;gap:32px;margin-bottom:18px}
 .totals>div span{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--label)}
 .totals b{display:block;font-size:24px;font-weight:600;color:var(--digit);font-variant-numeric:tabular-nums;
@@ -663,15 +670,30 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 <hr>
 <section>
 <h2 id=h-config>Configurazione</h2>
+<div class=grp>
+<div class=grp-h id=g-pomo>Pomodoro</div>
+<div class=row2>
 <div class=field><label id=l-work for=work>Lavoro</label><input id=work type=number min=1 max=180 inputmode=numeric></div>
 <div class=field><label id=l-brk for=brk>Pausa</label><input id=brk type=number min=1 max=120 inputmode=numeric></div>
+</div>
+<div class=row2>
 <div class=field><label id=l-long for=long>Pausa lunga</label><input id=long type=number min=1 max=120 inputmode=numeric></div>
 <div class=field><label id=l-cyc for=cyc>Cicli</label><input id=cyc type=number min=1 max=12 inputmode=numeric></div>
+</div>
+</div>
+<div class=grp>
+<div class=grp-h id=g-time>Tempo</div>
+<div class=row2>
 <div class=field><label id=l-gmt for=gmt>Fuso</label><input id=gmt type=number min=-12 max=14 inputmode=numeric></div>
 <div class=field><label id=l-dst for=dst>Ora legale</label><input id=dst type=number min=0 max=2 inputmode=numeric></div>
+</div>
+</div>
+<div class=grp>
+<div class=grp-h id=g-disp>Display</div>
 <div class=field><label id=l-bright for=bright>Luminosita</label><input id=bright type=range min=10 max=255></div>
 <label class=check for=auto><input id=auto type=checkbox><span id=l-auto>Avanzamento automatico</span></label>
 <label class=check for=buzz><input id=buzz type=checkbox><span id=l-buzz>Buzzer fine pomodoro</span></label>
+</div>
 <button id=save>Salva</button><span class=saved id=saved></span>
 </section>
 <hr>
@@ -689,7 +711,8 @@ opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transi
 </section>
 <script>
 const T={
-it:{status:"Stato",config:"Configurazione",sessions:"Sessioni",system:"Sistema",work:"Lavoro",brk:"Pausa",
+it:{status:"Stato",config:"Configurazione",sessions:"Sessioni",system:"Sistema",
+gpomo:"Pomodoro",gtime:"Tempo",gdisp:"Display",work:"Lavoro",brk:"Pausa",
 long:"Pausa lunga",cyc:"Cicli prima della pausa lunga",gmt:"Fuso orario (h)",dst:"Ora legale (+h)",
 bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
@@ -701,7 +724,8 @@ noteWork:"Lavoro: si parte",noteBreak:"Pausa: stacca un attimo",noteLong:"Pausa 
 modes:["Orologio","Cronometro","Pomodoro"],phases:["Lavoro","Pausa","Pausa lunga"],
 states:["Fermo","In corso","In pausa"],
 kinds:{"pomodoro-work":"Lavoro","pomodoro-partial":"Parziale","stopwatch":"Cronometro"}},
-en:{status:"Status",config:"Configuration",sessions:"Sessions",system:"System",work:"Work",brk:"Break",
+en:{status:"Status",config:"Configuration",sessions:"Sessions",system:"System",
+gpomo:"Pomodoro",gtime:"Time",gdisp:"Display",work:"Work",brk:"Break",
 long:"Long break",cyc:"Cycles before long break",gmt:"Timezone (h)",dst:"DST (+h)",
 bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
@@ -725,6 +749,7 @@ function askNotify(){try{if(window.Notification&&Notification.permission==="defa
 function applyStatic(){const d=T[lang];document.documentElement.lang=lang;
 $("lang").textContent=lang=="it"?"EN":"IT";
 $("h-status").textContent=d.status;$("h-config").textContent=d.config;$("h-sessions").textContent=d.sessions;$("h-system").textContent=d.system;
+$("g-pomo").textContent=d.gpomo;$("g-time").textContent=d.gtime;$("g-disp").textContent=d.gdisp;
 $("l-work").textContent=d.work+" ("+d.min+")";$("l-brk").textContent=d.brk+" ("+d.min+")";
 $("l-long").textContent=d.long+" ("+d.min+")";$("l-cyc").textContent=d.cyc;
 $("l-gmt").textContent=d.gmt;$("l-dst").textContent=d.dst;$("l-bright").textContent=d.bright;$("l-auto").textContent=d.auto;$("l-buzz").textContent=d.buzz;
