@@ -1,5 +1,8 @@
 #pragma once
 
+// ===================== Firmware =====================
+#define FW_VERSION       "1.3.0"
+
 // ===================== WiFi / NTP =====================
 // Config WiFi via portale captive (WiFiManager): niente credenziali hardcoded.
 // Primo avvio (o nessuna rete salvata) crea AP. Connettiti e inserisci SSID/pass.

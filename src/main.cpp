@@ -63,10 +63,23 @@ static const uint8_t BL_CH = 0;          // canale LEDC backlight
 void applyBright() { ledcWrite(BL_CH, cfgBright); }
 
 // lettura batteria: mV al pacco (partitore /2), media di 8 campioni
-int batteryMv() {
+int batteryMvRaw() {
   uint32_t sum = 0;
   for (int i = 0; i < 8; i++) sum += analogReadMilliVolts(PIN_BAT_ADC);
   return (int)((sum / 8) * 2);
+}
+
+// versione con debounce: campiona l'ADC al massimo una volta ogni 5s,
+// restituisce il valore in cache fra una lettura e l'altra
+int batteryMv() {
+  static int cachedMv = 0;
+  static uint32_t lastReadMs = 0;
+  uint32_t now = millis();
+  if (cachedMv == 0 || (uint32_t)(now - lastReadMs) >= 5000) {
+    cachedMv = batteryMvRaw();
+    lastReadMs = now;
+  }
+  return cachedMv;
 }
 
 // pacco LiPo presente? (sotto ~2.5V al pacco = USB senza batteria / lettura nulla)
@@ -312,8 +325,9 @@ static const uint16_t DIM = 0x8410;   // ~ rgb(130,130,130)
 void drawBigTime(const char* str, int cy, uint16_t col) {
   spr.setTextDatum(MC_DATUM);
   spr.setTextColor(col);
-  uint8_t font = (strlen(str) <= 5) ? 8 : 7;   // HH:MM/MM:SS = font8, H:MM:SS = font7
-  spr.drawString(str, SCR_W/2, cy, font);
+  spr.setTextSize((strlen(str) <= 5) ? 2 : 1);  // ingrandisce le cifre corte (HH:MM / MM:SS)
+  spr.drawString(str, SCR_W/2, cy, 7);          // sempre Font7 (7-segmenti)
+  spr.setTextSize(1);
 }
 
 void drawClock() {
@@ -392,6 +406,10 @@ void drawInfo() {
   spr.setTextDatum(TL_DATUM);
   spr.setTextColor(DIM, TFT_BLACK);
   spr.drawString("INFO", 6, 6, 2);
+  // revisione firmware in alto a destra
+  spr.setTextDatum(TR_DATUM);
+  spr.drawString("v" FW_VERSION, SCR_W - 6, 6, 2);
+  spr.setTextDatum(TL_DATUM);
 
   int mv = batteryMv();
   bool present = batteryPresent(mv);
@@ -700,7 +718,7 @@ for(let i=0;i<s.cycles;i++){const e=document.createElement("span");e.className="
 const cp=$("c-primary");cp.disabled=s.mode===0;
 cp.textContent=s.state===1?d.pause:(s.state===2?d.resume:d.start);
 $("c-stop").disabled=s.state===0;$("c-mode").disabled=s.state!==0;
-$("ip").textContent="worktimer.local · "+(s.ip||"")+(s.synced?"":" · "+d.nontp);
+$("ip").textContent="worktimer.local · "+(s.ip||"")+(s.fw?" · v"+s.fw:"")+(s.synced?"":" · "+d.nontp);
 if(s.batmv>0){let p=Math.round((s.batmv-3300)/9);p=Math.max(0,Math.min(100,p));
 $("bat").textContent=p+"% · "+(s.batmv/1000).toFixed(2)+" V"+(s.charging?" · "+d.charging:"");}else $("bat").textContent="";
 if(s.mode===2&&prevMode===2&&prevPhase!==null&&s.phase!==prevPhase)
@@ -771,6 +789,7 @@ String statusJson() {
   j += ",\"batmv\":" + String(bmv);
   j += ",\"charging\":"; j += (bmv >= BAT_MV_FULL ? "true" : "false");
   j += ",\"synced\":"; j += (timeSynced ? "true" : "false");
+  j += ",\"fw\":\"" FW_VERSION "\"";
   j += ",\"ip\":\"" + ipStr + "\"}";
   return j;
 }
