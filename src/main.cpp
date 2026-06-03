@@ -569,9 +569,8 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!doctype html><html lang=it><hea
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--digit);
 font-family:"SF Mono","DejaVu Sans Mono",Consolas,ui-monospace,monospace;
--webkit-font-smoothing:antialiased;padding:22px 18px 44px;max-width:440px;margin:0 auto;
-transition:opacity .2s}
-body.off{opacity:.45}
+-webkit-font-smoothing:antialiased;padding:22px 18px 44px;max-width:440px;margin:0 auto}
+body.off .hero,body.off .meta,body.off .dots{opacity:.4;transition:opacity .25s}
 header{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}
 .logo{font-size:13px;letter-spacing:.28em;color:var(--label);text-transform:uppercase}
 #lang{background:none;border:1px solid var(--line);color:var(--label);font:inherit;font-size:12px;
@@ -608,6 +607,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 font-size:15px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:13px;border-radius:9px;
 min-height:48px;cursor:pointer;transition:filter .12s}
 #save:active{filter:brightness(.92)}
+#save:disabled{opacity:.5;cursor:default}
 .saved{display:block;text-align:center;font-size:12px;color:var(--accent);margin-top:12px;opacity:0;
 letter-spacing:.1em;text-transform:uppercase;transition:opacity .25s}
 .saved.show{opacity:1}
@@ -654,10 +654,16 @@ background:var(--panel);border:1px solid var(--accent);color:var(--digit);border
 padding:13px 16px;font-size:13px;letter-spacing:.02em;text-align:center;z-index:10;
 opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transition:opacity .25s,transform .25s}
 .note.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.conn{position:fixed;left:50%;top:16px;width:calc(100% - 36px);max-width:404px;
+background:var(--panel);border:1px solid var(--work);color:var(--digit);border-radius:10px;
+padding:11px 16px;font-size:12px;letter-spacing:.04em;text-align:center;z-index:11;
+opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transition:opacity .25s,transform .25s}
+.conn.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style></head><body>
 <header><span class=logo>WorkTimer</span><button id=lang aria-label="switch language">EN</button></header>
 <div id=note class=note role=status aria-live=polite></div>
+<div id=conn class=conn role=status aria-live=polite></div>
 <section aria-live=polite>
 <h2 id=h-status>Stato</h2>
 <div class=hero><div class=ghost id=ghost>88:88</div><div class=time id=time>--:--</div></div>
@@ -722,6 +728,7 @@ long:"Pausa lunga",cyc:"Cicli",gmt:"Fuso orario",dst:"Ora legale",
 dstopt:["Nessuna (inverno)","Estate (+1h)","+2 ore"],tznow:"Ora sul dispositivo:",
 bright:"Luminosita",auto:"Avanzamento automatico",buzz:"Buzzer fine pomodoro",save:"Salva",saved:"Salvato",saveErr:"Errore, riprova",min:"min",
 today:"Oggi",total:"Totale",pomos:"Pomodori",empty:"Nessuna sessione registrata",nontp:"orario non sincronizzato",
+offline:"Dispositivo non raggiungibile, riprovo…",wifidown:"WiFi spento. Riavvia tenendo KEY.",
 csv:"CSV",clear:"Cancella log",ota:"Firmware",wifioff:"Spegni WiFi",charging:"in carica",
 start:"Avvia",pause:"Pausa",resume:"Riprendi",stop:"Stop",modeBtn:"Modo",
 askClear:"Cancellare tutto lo storico delle sessioni?",
@@ -736,6 +743,7 @@ long:"Long break",cyc:"Cycles",gmt:"Timezone",dst:"DST",
 dstopt:["None (winter)","Summer (+1h)","+2 hours"],tznow:"Time on device:",
 bright:"Brightness",auto:"Auto-advance",buzz:"Buzzer at pomodoro end",save:"Save",saved:"Saved",saveErr:"Error, retry",min:"min",
 today:"Today",total:"Total",pomos:"Pomodoros",empty:"No sessions yet",nontp:"clock not synced",
+offline:"Device unreachable, retrying…",wifidown:"WiFi off. Reboot holding KEY.",
 csv:"CSV",clear:"Clear log",ota:"Firmware",wifioff:"WiFi off",charging:"charging",
 start:"Start",pause:"Pause",resume:"Resume",stop:"Stop",modeBtn:"Mode",
 askClear:"Clear the whole session history?",
@@ -745,7 +753,7 @@ modes:["Clock","Stopwatch","Pomodoro"],phases:["Work","Break","Long break"],
 states:["Idle","Running","Paused"],
 kinds:{"pomodoro-work":"Work","pomodoro-partial":"Partial","stopwatch":"Stopwatch"}}};
 const $=id=>document.getElementById(id);
-let lang=localStorage.getItem("wt_lang")||"it",cfgLoaded=false,last=null,prevPhase=null,prevMode=null,noteTimer;
+let lang=localStorage.getItem("wt_lang")||"it",cfgLoaded=false,last=null,prevPhase=null,prevMode=null,noteTimer,wifiOff=false;
 function fmt(s){s=Math.max(0,Math.floor(s));let h=(s/3600)|0;s%=3600;let m=(s/60)|0,x=s%60;
 const p=n=>String(n).padStart(2,"0");return h>0?h+":"+p(m)+":"+p(x):p(m)+":"+p(x);}
 function hero(str){$("time").textContent=str;$("ghost").textContent=str.replace(/\d/g,"8");}
@@ -796,8 +804,8 @@ prevPhase=s.phase;prevMode=s.mode;
 if(!cfgLoaded){$("work").value=s.cwork;$("brk").value=s.cbreak;$("long").value=s.clong;$("cyc").value=s.cycles;
 $("gmt").value=s.cgmt;$("dst").value=s.cdst;$("bright").value=s.cbright;$("auto").checked=s.cauto;$("buzz").checked=s.cbuzz;tzPreview();cfgLoaded=true;}}
 async function poll(){try{const r=await fetch("/status",{cache:"no-store"});if(!r.ok)throw 0;
-last=await r.json();document.body.classList.remove("off");render(last);}
-catch(e){document.body.classList.add("off");}}
+last=await r.json();document.body.classList.remove("off");$("conn").classList.remove("show");render(last);}
+catch(e){document.body.classList.add("off");const c=$("conn");c.textContent=wifiOff?T[lang].wifidown:T[lang].offline;c.classList.add("show");}}
 async function loadLog(){try{const r=await fetch("/log",{cache:"no-store"});const j=await r.json(),d=T[lang];
 $("today").textContent=fmt(j.today);$("total").textContent=fmt(j.total);$("pomos").textContent=j.pomos;
 const wk=$("week");wk.textContent="";const mx=Math.max(1,...j.days.map(x=>x.s));
@@ -822,17 +830,19 @@ $("c-mode").onclick=()=>cmd("mode");
 $("save").addEventListener("click",async()=>{askNotify();
 const body=new URLSearchParams({work:$("work").value,brk:$("brk").value,long:$("long").value,cyc:$("cyc").value,
 gmt:$("gmt").value,dst:$("dst").value,bright:$("bright").value,auto:$("auto").checked?"1":"0",buzz:$("buzz").checked?"1":"0"});
-const sv=$("saved");
+const sv=$("saved"),btn=$("save");btn.disabled=true;
 try{const r=await fetch("/save",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
 if(!r.ok)throw 0;
 sv.classList.remove("err");sv.textContent=T[lang].saved;sv.classList.add("show");
 setTimeout(()=>sv.classList.remove("show"),1600);}
 catch(e){sv.classList.add("err","show");sv.textContent=T[lang].saveErr;
-setTimeout(()=>sv.classList.remove("show"),2600);}});
+setTimeout(()=>sv.classList.remove("show"),2600);}
+finally{btn.disabled=false;}});
 $("t-clear").onclick=async()=>{if(!confirm(T[lang].askClear))return;
 try{await fetch("/clearlog",{method:"POST"});loadLog();}catch(e){}};
 $("t-wifi").onclick=async()=>{if(!confirm(T[lang].askWifi))return;
-try{await fetch("/wifioff",{method:"POST"});}catch(e){}document.body.classList.add("off");};
+wifiOff=true;try{await fetch("/wifioff",{method:"POST"});}catch(e){}
+document.body.classList.add("off");const c=$("conn");c.textContent=T[lang].wifidown;c.classList.add("show");};
 $("lang").addEventListener("click",()=>{lang=lang=="it"?"en":"it";localStorage.setItem("wt_lang",lang);applyStatic();loadLog();});
 $("gmt").onchange=tzPreview;$("dst").onchange=tzPreview;
 buildGmt();applyStatic();poll();loadLog();setInterval(poll,1000);setInterval(loadLog,15000);
