@@ -5,3 +5,9 @@
 
 # local Claude Code skills/config
 .claude/
+
+# impeccable critique snapshots (local tooling output)
+.impeccable/
+
+# Obsidian per-machine layout (keep the rest of the vault config)
+.obsidian/workspace.json

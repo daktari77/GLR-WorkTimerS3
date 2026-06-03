@@ -19,7 +19,7 @@ Alla prima accensione (o se non trova una rete salvata) il timer crea un punto d
 
 Per riaprire il portale in seguito: **tieni premuto il tasto KEY mentre accendi** la scheda.
 
-A connessione avvenuta il display mostra in basso a destra l'indirizzo IP, e il timer è raggiungibile su **`http://worktimer.local`**.
+A connessione avvenuta il timer è raggiungibile su **`http://worktimer.local`**. L'indirizzo IP si legge nella schermata INFO (tieni premuto BOOT) e nella dashboard web.
 
 ## 2. I due tasti fisici
 
@@ -37,11 +37,15 @@ La modalità si cambia solo quando il timer è fermo, così non si interrompe un
 
 ## 3. Le tre modalità
 
-- **Orologio**: mostra ora e data (sincronizzate via internet). È lo stato di riposo.
-- **Cronometro**: conta in avanti. KEY breve per avviare, di nuovo per pausa, KEY lunga per fermare e salvare.
-- **Pomodoro**: alterna lavoro e pause. Parte dalla fase di lavoro, al termine passa alla pausa, e dopo un certo numero di cicli fa una pausa lunga. A ogni cambio fase lo schermo lampeggia.
+Ogni modalità ha un colore delle cifre diverso, per riconoscerla a colpo d'occhio:
+
+- **Orologio** (cifre **ciano**): mostra ora e data (sincronizzate via internet). È lo stato di riposo.
+- **Cronometro** (cifre **ambra**): conta in avanti. KEY breve per avviare, di nuovo per pausa, KEY lunga per fermare e salvare.
+- **Pomodoro** (cifre **colore della fase**: rosso lavoro, verde pausa, blu pausa lunga): alterna lavoro e pause. Parte dalla fase di lavoro, al termine passa alla pausa, e dopo un certo numero di cicli fa una pausa lunga. A ogni cambio fase lo schermo lampeggia e, se attivo, suona il buzzer.
 
 **Pausa tra le fasi**: nelle impostazioni puoi scegliere se il pomodoro avanza da solo alla fase successiva, oppure se si ferma in pausa e aspetta che premi KEY per ripartire.
+
+**Schermo a riposo**: dopo 2 minuti da fermo lo schermo si spegne per risparmiare. Premi un tasto qualsiasi per riaccenderlo (la prima pressione serve solo a svegliarlo, non avvia nulla).
 
 ## 4. Schermata INFO (batteria)
 
@@ -64,22 +68,22 @@ Apri **`http://worktimer.local`** dal telefono o dal computer. Niente app, nient
 - Etichetta della modalità, fase del pomodoro e stato (in corso / in pausa / fermo).
 - Pallini dei cicli del pomodoro.
 - Pulsanti di **controllo remoto**: Avvia/Pausa/Riprendi, Stop, Modo. Fanno quello che farebbero i tasti fisici, ma dal browser.
-- Riga con `worktimer.local`, l'IP e lo stato della batteria.
+- Riga con `worktimer.local`, l'IP, la versione del firmware e lo stato della batteria.
+- Se la scheda non risponde, in alto compare un avviso (**dispositivo non raggiungibile**); se hai spento tu il WiFi, lo dice esplicitamente.
 
-**Configurazione (al centro)**, poi premi **Salva**:
-- **Lavoro / Pausa / Pausa lunga** (minuti) e **Cicli prima della pausa lunga**.
-- **Fuso orario** e **Ora legale** (in ore). In Italia: fuso `1`, ora legale `1` d'estate e `0` d'inverno.
-- **Luminosità** dello schermo (cursore, effetto immediato dopo Salva).
-- **Avanzamento automatico** del pomodoro.
+I campi sono raggruppati in **Pomodoro**, **Tempo** e **Display**. Premi **Salva** per applicare:
+- **Pomodoro**: Lavoro / Pausa / Pausa lunga (minuti) e Cicli prima della pausa lunga.
+- **Tempo**: **Fuso orario** e **Ora legale** scelti da menu; sotto compare l'**anteprima dell'ora** che avrà il dispositivo, così regoli finché coincide col tuo orologio (niente numeri da indovinare).
+- **Display**: **Luminosità** (cursore, effetto immediato dopo Salva), **Avanzamento automatico** del pomodoro, **Buzzer fine pomodoro** (richiede un buzzer collegato; di serie è disattivato).
 
-Le durate del pomodoro si applicano subito solo se il pomodoro è fermo, per non interrompere una sessione attiva.
+Le durate del pomodoro si applicano subito solo se il pomodoro è fermo, per non interrompere una sessione attiva. Il salvataggio mostra **Salvato** in verde, oppure un errore in rosso se non è andato a buon fine.
 
 **Sessioni (in basso)**
 - Totali di **oggi** e **complessivo**, e numero di **pomodori** completati oggi.
 - Grafico a barre degli **ultimi 7 giorni**.
 - Elenco delle sessioni recenti (orario, tipo, durata).
 - **CSV**: scarica lo storico completo (`sessions.csv`).
-- **Cancella log**: azzera lo storico (chiede conferma).
+- **Cancella log**: azzera lo storico. Premi una volta per armare (il tasto diventa rosso "Conferma?"), una seconda volta entro 3 secondi per confermare.
 
 **Sistema**
 - **Firmware**: apre la pagina di aggiornamento (vedi sotto).
@@ -98,8 +102,9 @@ Nessun cavo, nessuna combinazione di tasti.
 
 ## 7. Problemi comuni
 
-- **Non trovo `worktimer.local`**: usa l'IP mostrato sul display (orologio in basso a destra, o schermata INFO). Verifica di essere sulla stessa rete WiFi.
-- **L'ora è sbagliata**: controlla Fuso e Ora legale. D'estate Ora legale = `1`, d'inverno = `0`.
+- **Non trovo `worktimer.local`**: usa l'IP mostrato nella schermata INFO (tieni premuto BOOT) o nella dashboard. Verifica di essere sulla stessa rete WiFi.
+- **Lo schermo è nero**: probabilmente è in riposo (dopo 2 minuti da fermo). Premi un tasto per riaccenderlo.
+- **L'ora è sbagliata**: regola Fuso e Ora legale dalla dashboard finché l'anteprima coincide col tuo orologio. D'estate Ora legale = estate, d'inverno = nessuna.
 - **Display scuro / poco luminoso**: alza la **Luminosità** nelle impostazioni.
 - **Ho spento il WiFi e non raggiungo più la pagina**: riaccendi la scheda tenendo premuto **KEY** per riaprire il portale, oppure riavvia normalmente per riconnetterti alla rete salvata.
 - **La sessione è ripartita in pausa dopo un riavvio**: è voluto. Il tempo è conservato; premi **KEY** per riprendere.
@@ -122,7 +127,7 @@ On first power-up (or when no saved network is found) the timer creates a WiFi a
 
 To reopen the portal later: **hold KEY while powering on** the board.
 
-Once connected, the display shows the IP address at the bottom right, and the timer is reachable at **`http://worktimer.local`**.
+Once connected, the timer is reachable at **`http://worktimer.local`**. The IP address is shown on the INFO screen (hold BOOT) and in the web dashboard.
 
 ## 2. The two physical buttons
 
@@ -140,11 +145,15 @@ Mode only changes while the timer is stopped, so a running session is never inte
 
 ## 3. The three modes
 
-- **Clock**: shows time and date (synced over the internet). The resting state.
-- **Stopwatch**: counts up. KEY short to start, again to pause, KEY long to stop and save.
-- **Pomodoro**: alternates work and breaks. It starts with a work phase, then a break, and after a set number of cycles a long break. The screen flashes on every phase change.
+Each mode tints the digits a different color, so you recognize it at a glance:
+
+- **Clock** (**cyan** digits): shows time and date (synced over the internet). The resting state.
+- **Stopwatch** (**amber** digits): counts up. KEY short to start, again to pause, KEY long to stop and save.
+- **Pomodoro** (**phase-colored** digits: red work, green break, blue long break): alternates work and breaks. It starts with a work phase, then a break, and after a set number of cycles a long break. The screen flashes on every phase change and, if enabled, the buzzer sounds.
 
 **Pause between phases**: in settings you can choose whether the pomodoro advances to the next phase on its own, or stops in pause and waits for you to press KEY.
+
+**Screen sleep**: after 2 minutes idle the screen turns off to save power. Press any button to wake it (the first press only wakes it, it does not start anything).
 
 ## 4. INFO screen (battery)
 
@@ -167,22 +176,22 @@ Open **`http://worktimer.local`** from a phone or computer. No app, no account. 
 - Mode label, pomodoro phase, and state (running / paused / idle).
 - Pomodoro cycle dots.
 - **Remote control** buttons: Start/Pause/Resume, Stop, Mode. They do what the physical buttons do, from the browser.
-- A line with `worktimer.local`, the IP, and battery status.
+- A line with `worktimer.local`, the IP, the firmware version, and battery status.
+- If the board stops responding, a banner appears at the top (**device unreachable**); if you turned WiFi off yourself, it says so explicitly.
 
-**Configuration (middle)**, then press **Save**:
-- **Work / Break / Long break** (minutes) and **Cycles before long break**.
-- **Timezone** and **DST** (in hours). For Italy: timezone `1`, DST `1` in summer and `0` in winter.
-- Screen **Brightness** (slider, takes effect right after Save).
-- Pomodoro **Auto-advance**.
+Fields are grouped into **Pomodoro**, **Time**, and **Display**. Press **Save** to apply:
+- **Pomodoro**: Work / Break / Long break (minutes) and Cycles before long break.
+- **Time**: **Timezone** and **DST** picked from menus; below them a **live preview** of the time the device will show, so you adjust until it matches your watch (no numbers to guess).
+- **Display**: **Brightness** (slider, takes effect right after Save), pomodoro **Auto-advance**, **Buzzer at pomodoro end** (needs a buzzer wired; off by default).
 
-Pomodoro durations apply immediately only while the pomodoro is stopped, so an active session is not interrupted.
+Pomodoro durations apply immediately only while the pomodoro is stopped, so an active session is not interrupted. Saving shows **Saved** in green, or an error in red if it failed.
 
 **Sessions (bottom)**
 - **Today** and **Total** times, and the number of **pomodoros** completed today.
 - A bar chart of the **last 7 days**.
 - A list of recent sessions (time, kind, duration).
 - **CSV**: download the full history (`sessions.csv`).
-- **Clear log**: wipes the history (asks for confirmation).
+- **Clear log**: wipes the history. Press once to arm (the button turns red "Confirm?"), press again within 3 seconds to confirm.
 
 **System**
 - **Firmware**: opens the update page (see below).
@@ -201,8 +210,9 @@ No cable, no button combination.
 
 ## 7. Troubleshooting
 
-- **Can't find `worktimer.local`**: use the IP shown on the display (clock bottom right, or the INFO screen). Make sure you are on the same WiFi network.
-- **Wrong time**: check Timezone and DST. In summer DST = `1`, in winter = `0`.
+- **Can't find `worktimer.local`**: use the IP shown on the INFO screen (hold BOOT) or in the dashboard. Make sure you are on the same WiFi network.
+- **Screen is black**: it is likely asleep (after 2 minutes idle). Press any button to wake it.
+- **Wrong time**: adjust Timezone and DST in the dashboard until the live preview matches your watch. In summer set DST to summer, in winter to none.
 - **Dark / dim display**: raise **Brightness** in settings.
 - **Turned WiFi off and can't reach the page**: power on while holding **KEY** to reopen the portal, or reboot normally to reconnect to the saved network.
 - **Session came back paused after a reboot**: this is intended. Elapsed time is kept; press **KEY** to resume.
