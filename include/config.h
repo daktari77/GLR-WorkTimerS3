@@ -20,6 +20,15 @@
 #define PIN_POWER_ON     15
 #define PIN_BTN_KEY      14   // bottone in basso (azione primaria)
 #define PIN_BTN_BOOT     0    // bottone in alto (cambio modo / stop)
+#define PIN_BAT_ADC      4    // partitore batteria T-Display S3 (Vbatt = ADC*2)
+
+// LiPo: tensione (mV, al pacco) per 0% e 100% carica
+#define BAT_MV_EMPTY     3300
+#define BAT_MV_FULL      4200
+
+// ===================== Schermo / comportamento =====================
+#define SCREEN_BRIGHT    200  // luminosita' backlight di default (0-255)
+#define POMO_AUTO_ADV    1    // 1 = pomodoro avanza da solo tra le fasi
 
 // ===================== Bottoni =====================
 #define DEBOUNCE_MS      40

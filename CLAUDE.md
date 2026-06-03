@@ -27,14 +27,20 @@ There is no test suite and nothing to lint — this is bare firmware.
 
 2. **Always build with `-j 1`.** Windows Defender locks freshly-written `.o` files; parallel build races → same `ar: No such file` error. Editing `platformio.ini` invalidates everything and forces a full rebuild where this resurfaces — just rerun, scons resumes incrementally.
 
-3. **Upload needs MANUAL download mode; auto-reset is unreliable.** ESP32-S3 native USB CDC: once the TinyUSB app firmware runs, esptool's auto-reset can't enter the bootloader (`No serial data received` / `Could not open COM16`). To flash, have the user put the board in download mode: **hold BOOT, tap RST, release BOOT**, then flash with `--before no_reset`. `pio run -t upload` is flaky; the reliable path is direct esptool of just the app partition (skips rebuild + race):
+3. **Prefer OTA over WiFi; USB only for the first OTA-less flash.** The firmware serves `/update` (an `Update.h` upload page). Reflash with no cable, no buttons:
+   ```powershell
+   Invoke-WebRequest -Uri http://worktimer.local/update -Method Post `
+     -Form @{ firmware = Get-Item "C:\pio-ws\GLR-WorkTimer\build\lilygo-t-display-s3\firmware.bin" }
+   ```
+   Returns `{"ok":true}`, auto-reboots, back online in ~2s. Device IP `192.168.1.200`, mDNS `worktimer.local`. Use this whenever the running firmware already has OTA.
+
+   **USB path (first flash of an OTA-less build, or recovery): auto-reset is unreliable.** `pio run -t upload` and any esptool run that renegotiates to 921600 die at `No serial data received` after the stub loads; native USB CDC can't re-enter the bootloader with an app running. Reliable: put the board in download mode (**hold BOOT, tap RST, release BOOT** — LCD goes dark), then flash just the app at **`--baud 115200 --before no_reset`** (no baud renegotiation):
    ```powershell
    $et="$env:USERPROFILE\.platformio\packages\tool-esptoolpy\esptool.py"
    $b="C:\pio-ws\GLR-WorkTimer\build\lilygo-t-display-s3"
-   python $et --chip esp32s3 --port COM16 --baud 921600 --before no_reset --after hard_reset write_flash -z 0x10000 "$b\firmware.bin"
+   python $et --chip esp32s3 --port COM16 --baud 115200 --before no_reset --after hard_reset write_flash -z 0x10000 "$b\firmware.bin"
    ```
-   Full flash offsets: `0x0` bootloader, `0x8000` partitions, `0xe000` boot_app0, `0x10000` firmware.
-   After flashing, software/esptool resets tend to land back in download mode (`boot:0x22`) because IO0 strapping is ambiguous over native USB — the user must press the physical **RST** for a normal app boot (`boot:0x2b`).
+   Full flash offsets: `0x0` bootloader, `0x8000` partitions, `0xe000` boot_app0, `0x10000` firmware. If the board stops enumerating entirely (no `303A` COM in `pio device list`), unplug/replug the USB-C cable; suspect a charge-only cable. After flashing, press the physical **RST** for a normal app boot.
 
 ## Architecture
 
@@ -46,15 +52,24 @@ Everything is in `src/main.cpp` (~360 lines) driven by tunables in `include/conf
 
 **Elapsed-time accounting** is the core trick: `accumMs` holds closed segments, `segStart` marks the live segment; `elapsedMs()` = `accumMs + (now - segStart)` only while running. Pause folds the live segment into `accumMs`. This is what makes pause/resume and persistence work without a wall clock.
 
-**Buttons** are polled (no interrupts) in `loop()` via `pollButton()`, which debounces and emits `EV_SHORT` / `EV_LONG`. Mapping: KEY short = start/pause/resume, KEY long = stop+save, BOOT short = switch mode, BOOT long (in clock) = wipe log. Holding **KEY at boot** forces the WiFi config portal (BOOT/GPIO0 is a strapping pin and is deliberately NOT used for this).
+**Buttons** are polled (no interrupts) in `loop()` via `pollButton()`, which debounces and emits `EV_SHORT` / `EV_LONG`. Mapping: KEY short = start/pause/resume, KEY long = stop+save, BOOT short = switch mode, BOOT long = toggle the INFO screen (battery %/voltage, charging Y/N, IP; short-press or 8s auto-hides). Log wipe is no longer a button; it's the web **Cancella log** action (`/clearlog`). Holding **KEY at boot** forces the WiFi config portal (BOOT/GPIO0 is a strapping pin and is deliberately NOT used for this).
 
 **Persistence (NVS via `Preferences`)**: `saveState()` is called on every state transition and every `STATE_SAVE_MS` while running. Because `millis()` resets on reboot, restored sessions come back as `ST_PAUSED` (elapsed preserved, user resumes with KEY) — never as running.
 
-**Time/WiFi/web**: `setupTime()` uses WiFiManager's captive portal (AP `WorkTimer-Setup`); no hardcoded credentials. WiFi stays **on** after NTP sync (it used to power down) so `startWeb()` can serve a config page. `WebServer` on :80 + mDNS `worktimer.local` exposes a form to edit pomodoro durations; `handleSave()` clamps inputs, writes them to NVS via `saveConfig()`, and applies live only when the pomodoro is idle. Durations live in globals `cfgWork/cfgBreak/cfgLong/cfgCycles` (loaded by `loadConfig()`, defaults from `config.h` macros) — `pomoSetPhase()`/`pomoAdvance()` read these, not the macros. The board IP is shown bottom-right on the clock screen.
+**Time/WiFi/web**: `setupTime()` uses WiFiManager's captive portal (AP `WorkTimer-Setup`); no hardcoded credentials. WiFi stays **on** after NTP sync so `startWeb()` can serve the dashboard. NTP offsets are configurable (`cfgGmtMin`/`cfgDstMin`, applied via `configTime()`), not the `config.h` macros directly.
+
+`WebServer` on :80 + mDNS `worktimer.local` serves a **single self-contained dashboard** (one PROGMEM page `PAGE_HTML`, sent with `send_P`; no CDN, framework, or external font — bilingual IT/EN handled client-side via `localStorage`). The client polls `/status` (~1s) and `/log` (~15s) and patches the DOM in place. Endpoints:
+- `GET /status` → JSON: `mode/state/phase/elapsed/target/done/cycles`, config echo (`cwork/cbreak/clong/cgmt/cdst/cauto/cbright`), `batmv`+`charging`, `synced`, `ip`.
+- `GET /log` → JSON: last 50 rows newest-first, `today`/`total` totals, `pomos` (today's pomodoro-work count), `days[7]` (7-day second buckets for the bar chart). Reads all of `/sessions.csv` into a `std::vector<String>`.
+- `POST /save` → `handleSave()` clamps inputs to NVS via `saveConfig()`, applies brightness + timezone live, pomodoro durations live only when idle. Returns `{"ok":true}`.
+- `GET /cmd?a=start|pause|resume|stop|mode` → remote buttons, calls the same `action*()` funcs as the physical keys.
+- `POST /clearlog`, `GET /sessions.csv` (download), `POST /wifioff` (radio off; re-enable by holding KEY at boot), `GET|POST /update` (browser OTA via `Update.h`).
+
+Config globals `cfgWork/cfgBreak/cfgLong/cfgCycles` + `cfgGmtMin/cfgDstMin/cfgAutoAdv/cfgBright` are loaded by `loadConfig()` (defaults from `config.h`) — `pomoSetPhase()`/`pomoAdvance()` read these, not the macros. Backlight is on LEDC PWM (`applyBright()` writes `cfgBright`). Battery is read on `PIN_BAT_ADC` (GPIO4) via `batteryMv()` (`analogReadMilliVolts × 2`, 8-sample average). The board IP shows bottom-right on the clock screen; battery/charge/IP also have a dedicated INFO screen on BOOT-long.
 
 **Rendering**: full-screen 16-bit `TFT_eSprite` back-buffer (`render()` clears → draws → `pushSprite`), redrawn ~30 fps. Minimal black-on-white-corrected look: big white 7-segment digits (`drawBigTime()` picks Font8 ≤5 chars else Font7), dim grey labels (`DIM`). `tft.invertDisplay(true)` in `setup()` is mandatory or the panel shows inverted colors. Sprite needs PSRAM (`-DBOARD_HAS_PSRAM`); check serial for `[SPR] alloc fail`.
 
-**Pomodoro** auto-advances in `loop()` when `elapsedMs() >= pomoTargetMs`: flashes the screen, logs completed work segments, sets the next phase via `pomoSetPhase()`, and restarts automatically. Long break every `POMO_CYCLES_TO_LONG` work segments.
+**Pomodoro** advances in `loop()` when `elapsedMs() >= pomoTargetMs`: flashes the screen, then `pomoAdvance()` logs the completed work segment and sets the next phase via `pomoNextPhase()`. If `cfgAutoAdv` it restarts running; otherwise it lands in `ST_PAUSED` awaiting KEY. Long break every `cfgCycles` work segments.
 
 **Session log**: appended to LittleFS `/sessions.csv` as `timestamp,kind,seconds` by `logSession()`.
 
